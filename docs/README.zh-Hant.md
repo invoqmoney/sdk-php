@@ -97,9 +97,9 @@ SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳。
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` 回傳結帳頁使用的公開帳單結構。它包含 `amount_paid`、`amount_due`、`payment_status`、`project`、`deposit_address`、`monitoring_ends_at`、`direct_onchain_rails` 等欄位，但不包含 `reference_id`。如果需要商家端的 `reference_id`，請使用建立帳單的回應或 `invoice.paid` webhook。
+`get()` 回傳結帳頁使用的公開帳單結構。它包含 `amount_paid`、`amount_due`、`amount_overpaid`、`payment_status`、`project`、`deposit_address`、`monitoring_ends_at`、`monitoring_status`、`transfers`、`direct_onchain_rails` 等欄位，但不包含 `reference_id`。如果需要商家端的 `reference_id`，請使用建立帳單的回應或 `invoice.paid` webhook。
 
-回應裡的金額由 API 統一格式化：用 `'129'` 建立，帳單回傳 `amount: '129.0000'`。比較金額請按數值比，不要按字串比。`amount_due` 依 `max(amount - amount_paid, 0)` 衍生，使用和 `amount_paid` 相同的 18 位小數 scale。
+回應裡的金額由 API 統一格式化：用 `'129'` 建立，帳單回傳 `amount: '129.0000'`。比較金額請按數值比，不要按字串比。`amount_due` 依 `max(amount - amount_paid, 0)` 衍生，使用和 `amount_paid` 相同的 18 位小數 scale；`amount_overpaid` 與它互為鏡像，即 `max(amount_paid - amount, 0)`，所以你不必自己做減法。`monitoring_status` 取值 `'active'` 或 `'ended'`——一旦變為 `'ended'`，收款位址就不再被監控——而 `transfers` 是已確認的鏈上收款紀錄（每一項都含 `tx_hash`、`amount` 和 `explorer_tx_url`）。測試帳單裡兩者分別為 `null` / `[]`。
 
 ## 建立測試付款
 

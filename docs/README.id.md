@@ -111,15 +111,22 @@ $invoice = $invoq->invoices->get('inv_123');
 ```
 
 `get()` mengembalikan bentuk invoice publik yang dipakai checkout. Ini mencakup field
-seperti `amount_paid`, `amount_due`, `payment_status`, `project`, `deposit_address`,
-`monitoring_ends_at`, dan `direct_onchain_rails`, tetapi tidak menyertakan
-`reference_id`. Gunakan respons pembuatan atau webhook `invoice.paid` saat Anda
-membutuhkan `reference_id` merchant Anda.
+seperti `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`,
+`deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers`, dan
+`direct_onchain_rails`, tetapi tidak menyertakan `reference_id`. Gunakan respons
+pembuatan atau webhook `invoice.paid` saat Anda membutuhkan `reference_id`
+merchant Anda.
 
 Jumlah di respons dinormalkan oleh API: buat dengan `'129'` dan invoice mengembalikan
 `amount: '129.0000'`. Bandingkan jumlah secara numerik, bukan sebagai string.
 `amount_due` diturunkan sebagai `max(amount - amount_paid, 0)` dan memakai skala 18
-desimal yang sama dengan `amount_paid`.
+desimal yang sama dengan `amount_paid`; `amount_overpaid` adalah kebalikannya,
+`max(amount_paid - amount, 0)`, jadi Anda tidak perlu mengurangkannya sendiri.
+`monitoring_status` bernilai `'active'` atau `'ended'` — begitu bernilai
+`'ended'`, alamat deposit tidak lagi dipantau — dan `transfers` adalah jejak
+penerimaan on-chain yang sudah terkonfirmasi (tiap entri punya `tx_hash`,
+`amount`, dan `explorer_tx_url`). Keduanya bernilai `null` / `[]` untuk invoice
+uji coba.
 
 ## Membuat pembayaran uji coba
 

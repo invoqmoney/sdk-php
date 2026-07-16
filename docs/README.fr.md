@@ -97,9 +97,9 @@ Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` renvoie la forme de facture publique utilisée par la page de paiement. Elle inclut des champs tels que `amount_paid`, `amount_due`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at` et `direct_onchain_rails`, mais n’inclut pas `reference_id`. Utilisez la réponse de création ou le webhook `invoice.paid` quand vous avez besoin de votre `reference_id` marchand.
+`get()` renvoie la forme de facture publique utilisée par la page de paiement. Elle inclut des champs tels que `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` et `direct_onchain_rails`, mais n’inclut pas `reference_id`. Utilisez la réponse de création ou le webhook `invoice.paid` quand vous avez besoin de votre `reference_id` marchand.
 
-Les montants des réponses sont normalisés par l’API : créez avec `'129'` et la facture renvoie `amount: '129.0000'`. Comparez les montants numériquement, pas comme des chaînes. `amount_due` est dérivé sous la forme `max(amount - amount_paid, 0)` et utilise la même échelle à 18 décimales que `amount_paid`.
+Les montants des réponses sont normalisés par l’API : créez avec `'129'` et la facture renvoie `amount: '129.0000'`. Comparez les montants numériquement, pas comme des chaînes. `amount_due` est dérivé sous la forme `max(amount - amount_paid, 0)` et utilise la même échelle à 18 décimales que `amount_paid` ; `amount_overpaid` en est le miroir, `max(amount_paid - amount, 0)`, si bien que vous n’avez jamais à soustraire d’argent vous-même. `monitoring_status` vaut `'active'` ou `'ended'` — une fois à `'ended'`, l’adresse de dépôt n’est plus surveillée — et `transfers` est le journal confirmé des encaissements on-chain (chaque entrée a `tx_hash`, `amount` et `explorer_tx_url`). Les deux valent `null` / `[]` pour les factures de test.
 
 ## Créez un paiement de test
 

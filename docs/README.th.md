@@ -97,9 +97,9 @@ SDK จะคืนออบเจกต์ `data` ของ response กลั�
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` จะคืนรูปแบบใบแจ้งหนี้สาธารณะที่หน้า checkout ใช้ โดยมีฟิลด์ต่าง ๆ เช่น `amount_paid`, `amount_due`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at` และ `direct_onchain_rails` แต่ไม่มี `reference_id` ถ้าต้องใช้ `reference_id` ฝั่ง merchant ให้ใช้ response ตอนสร้างใบแจ้งหนี้หรือ webhook `invoice.paid`
+`get()` จะคืนรูปแบบใบแจ้งหนี้สาธารณะที่หน้า checkout ใช้ โดยมีฟิลด์ต่าง ๆ เช่น `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` และ `direct_onchain_rails` แต่ไม่มี `reference_id` ถ้าต้องใช้ `reference_id` ฝั่ง merchant ให้ใช้ response ตอนสร้างใบแจ้งหนี้หรือ webhook `invoice.paid`
 
-ยอดเงินในการตอบกลับจะถูกปรับให้เป็นรูปแบบมาตรฐานโดย API: สร้างด้วย `'129'` ใบแจ้งหนี้จะตอบกลับ `amount: '129.0000'` เวลาจะเทียบยอดเงินให้เทียบเป็นตัวเลข อย่าเทียบเป็นสตริง `amount_due` คำนวณจาก `max(amount - amount_paid, 0)` และใช้สเกลทศนิยม 18 ตำแหน่งเหมือน `amount_paid`
+ยอดเงินในการตอบกลับจะถูกปรับให้เป็นรูปแบบมาตรฐานโดย API: สร้างด้วย `'129'` ใบแจ้งหนี้จะตอบกลับ `amount: '129.0000'` เวลาจะเทียบยอดเงินให้เทียบเป็นตัวเลข อย่าเทียบเป็นสตริง `amount_due` คำนวณจาก `max(amount - amount_paid, 0)` และใช้สเกลทศนิยม 18 ตำแหน่งเหมือน `amount_paid` ขณะที่ `amount_overpaid` เป็นภาพสะท้อนของมัน คือ `max(amount_paid - amount, 0)` คุณจึงไม่ต้องลบเงินเอง `monitoring_status` มีค่าเป็น `'active'` หรือ `'ended'` — พอเป็น `'ended'` แล้ว ที่อยู่รับเงินจะไม่ถูกเฝ้าดูอีกต่อไป — ส่วน `transfers` คือรายการรับเงินบนเชนที่ยืนยันแล้ว (แต่ละรายการมี `tx_hash`, `amount` และ `explorer_tx_url`) ทั้งคู่จะเป็น `null` / `[]` สำหรับใบแจ้งหนี้ทดสอบ
 
 ## สร้างการชำระเงินทดสอบ
 

@@ -18,7 +18,9 @@ $invoice = [
     'deposit_address' => null,
     'status' => 'unpaid',
     'amount_due' => '149.000000000000000000',
+    'amount_overpaid' => '0.000000000000000000',
     'monitoring_ends_at' => null,
+    'monitoring_status' => null,
     'direct_onchain_rails' => [],
 ];
 
@@ -31,6 +33,7 @@ $publicInvoice['project'] = [
 ];
 $publicInvoice['amount_paid'] = '0.000000000000000000';
 $publicInvoice['payment_status'] = 'unpaid';
+$publicInvoice['transfers'] = [];
 
 header('Content-Type: application/json');
 
@@ -173,6 +176,7 @@ if ($method === 'POST' && $path === '/v1/invoices/inv_test_123/test-payments') {
                 ...$invoice,
                 'amount_paid' => '150.000000000000000000',
                 'amount_due' => '0.000000000000000000',
+                'amount_overpaid' => '1.000000000000000000',
                 'reference_id' => null,
                 'status' => 'paid',
                 'fully_paid_at' => '2026-06-15T00:00:00.000Z',
