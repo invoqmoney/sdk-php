@@ -97,9 +97,9 @@ SDK trả về trực tiếp đối tượng `data` của phản hồi dưới d
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` trả về dạng hóa đơn công khai mà trang checkout sử dụng. Nó bao gồm các trường như `amount_paid`, `amount_due`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at` và `direct_onchain_rails`, nhưng không bao gồm `reference_id`. Hãy dùng phản hồi tạo hóa đơn hoặc webhook `invoice.paid` khi bạn cần `reference_id` phía merchant.
+`get()` trả về dạng hóa đơn công khai mà trang checkout sử dụng. Nó bao gồm các trường như `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` và `direct_onchain_rails`, nhưng không bao gồm `reference_id`. Hãy dùng phản hồi tạo hóa đơn hoặc webhook `invoice.paid` khi bạn cần `reference_id` phía merchant.
 
-Số tiền trong phản hồi được API chuẩn hóa: tạo với `'129'` thì hóa đơn trả về `amount: '129.0000'`. So sánh số tiền theo giá trị số, đừng so sánh chuỗi. `amount_due` được tính là `max(amount - amount_paid, 0)` và dùng cùng thang 18 chữ số thập phân như `amount_paid`.
+Số tiền trong phản hồi được API chuẩn hóa: tạo với `'129'` thì hóa đơn trả về `amount: '129.0000'`. So sánh số tiền theo giá trị số, đừng so sánh chuỗi. `amount_due` được tính là `max(amount - amount_paid, 0)` và dùng cùng thang 18 chữ số thập phân như `amount_paid`; `amount_overpaid` là bản đối xứng của nó, `max(amount_paid - amount, 0)`, nên bạn không bao giờ phải tự trừ tiền. `monitoring_status` là `'active'` hoặc `'ended'` — khi đã là `'ended'`, địa chỉ nạp tiền không còn được theo dõi nữa — còn `transfers` là danh sách biên nhận trên chuỗi đã xác nhận (mỗi mục có `tx_hash`, `amount` và `explorer_tx_url`). Cả hai đều là `null` / `[]` với hóa đơn thử nghiệm.
 
 ## Tạo thanh toán thử nghiệm
 

@@ -147,6 +147,9 @@ function testClient(string $baseUrl): void
     same('149.0000', $invoice['amount']);
     same('unpaid', $invoice['status']);
     same('https://merchant.test/thanks', $invoice['return_url']);
+    same('0.000000000000000000', $invoice['amount_overpaid']);
+    same(null, $invoice['monitoring_status']);
+    same(false, array_key_exists('transfers', $invoice));
 
     $invoiceWithoutOptionalStrings = $client->invoices->create([
         'amount' => '150',
@@ -177,6 +180,9 @@ function testClient(string $baseUrl): void
     same('0.000000000000000000', $fetched['amount_paid']);
     same('149.000000000000000000', $fetched['amount_due']);
     same('unpaid', $fetched['payment_status']);
+    same('0.000000000000000000', $fetched['amount_overpaid']);
+    same(null, $fetched['monitoring_status']);
+    same([], $fetched['transfers']);
 
     $paidInvoice = $client->invoices->createTestPayment('inv_test_123', [
         'amount' => '149',
@@ -185,6 +191,7 @@ function testClient(string $baseUrl): void
     same('paid', $paidInvoice['status']);
     same('149.000000000000000000', $paidInvoice['amount_paid']);
     same('0.000000000000000000', $paidInvoice['amount_due']);
+    same('0.000000000000000000', $paidInvoice['amount_overpaid']);
 
     $paidInvoiceWithoutReference = $client->invoices->createTestPayment('inv_test_123', [
         'amount' => '150',
@@ -193,6 +200,7 @@ function testClient(string $baseUrl): void
     same('paid', $paidInvoiceWithoutReference['status']);
     same('150.000000000000000000', $paidInvoiceWithoutReference['amount_paid']);
     same(null, $paidInvoiceWithoutReference['reference_id']);
+    same('1.000000000000000000', $paidInvoiceWithoutReference['amount_overpaid']);
 
     expectThrowsExactly(
         fn () => $client->invoices->create([
