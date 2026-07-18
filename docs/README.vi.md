@@ -83,7 +83,7 @@ $invoice = $invoq->invoices->create([
 ]);
 ```
 
-Dùng số tiền do máy chủ quyết định. Đừng tin số tiền phía client gửi lên. `amount` là chuỗi thập phân USD từ `'0.01'` đến `'999.99'`, tối đa 2 chữ số lẻ, ví dụ `'129'` hoặc `'129.99'`.
+Dùng số tiền do máy chủ quyết định. Đừng tin số tiền phía client gửi lên. `amount` là chuỗi thập phân USD từ `'0.01'` đến `'1000000.00'`, tối đa 2 chữ số lẻ, ví dụ `'129'` hoặc `'129.99'`.
 
 Dùng một `reference_id` ổn định để nối webhook `invoice.paid` về đúng đơn hàng của bạn. Nó cũng giúp thao tác tạo an toàn khi thử lại: tạo lại với cùng `reference_id` và cùng nội dung hóa đơn sẽ trả về hóa đơn đã có thay vì tạo trùng; nếu nội dung khác nhau, API sẽ báo lỗi `409 reference_id_conflict`.
 

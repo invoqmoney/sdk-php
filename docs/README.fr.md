@@ -83,7 +83,7 @@ $invoice = $invoq->invoices->create([
 ]);
 ```
 
-Définissez le montant côté serveur. Ne faites pas confiance aux montants envoyés par le client. `amount` est une chaîne décimale en USD de `'0.01'` à `'999.99'`, avec au plus 2 décimales, comme `'129'` ou `'129.99'`.
+Définissez le montant côté serveur. Ne faites pas confiance aux montants envoyés par le client. `amount` est une chaîne décimale en USD de `'0.01'` à `'1000000.00'`, avec au plus 2 décimales, comme `'129'` ou `'129.99'`.
 
 Utilisez un `reference_id` stable pour relier les webhooks `invoice.paid` à votre commande. Il permet aussi de relancer la création sans risque : si vous recréez avec le même `reference_id` et les mêmes conditions, vous récupérez la facture existante au lieu d’un doublon ; avec des conditions différentes, l’appel échoue avec une erreur d’API `409 reference_id_conflict`.
 

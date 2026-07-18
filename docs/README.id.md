@@ -89,7 +89,7 @@ $invoice = $invoq->invoices->create([
 ```
 
 Tentukan jumlahnya di sisi server. Jangan percaya jumlah yang dikirim klien. `amount`
-adalah string desimal USD dari `'0.01'` sampai `'999.99'` dengan maksimal 2 angka di
+adalah string desimal USD dari `'0.01'` sampai `'1000000.00'` dengan maksimal 2 angka di
 belakang koma, misalnya `'129'` atau `'129.99'`.
 
 Pakai `reference_id` yang stabil untuk memetakan webhook `invoice.paid` kembali ke

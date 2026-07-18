@@ -90,7 +90,7 @@ $invoice = $invoq->invoices->create([
 ```
 
 Use um valor definido no servidor. Não confie em valores vindos do cliente.
-`amount` é uma string decimal em USD de `'0.01'` a `'999.99'`, com até 2 casas
+`amount` é uma string decimal em USD de `'0.01'` a `'1000000.00'`, com até 2 casas
 decimais, como `'129'` ou `'129.99'`.
 
 Use um `reference_id` estável para ligar os webhooks `invoice.paid` ao seu

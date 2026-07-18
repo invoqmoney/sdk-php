@@ -83,7 +83,7 @@ $invoice = $invoq->invoices->create([
 ]);
 ```
 
-Tutarı sunucu tarafında belirleyin. İstemciden gelen tutarlara güvenmeyin. `amount`, `'0.01'` ile `'999.99'` arasında, en fazla 2 ondalık basamaklı, USD cinsinden ondalık bir dizedir — örneğin `'129'` veya `'129.99'`.
+Tutarı sunucu tarafında belirleyin. İstemciden gelen tutarlara güvenmeyin. `amount`, `'0.01'` ile `'1000000.00'` arasında, en fazla 2 ondalık basamaklı, USD cinsinden ondalık bir dizedir — örneğin `'129'` veya `'129.99'`.
 
 `invoice.paid` webhook'larını siparişinize geri bağlamak için kararlı bir `reference_id` kullanın. Oluşturmayı yeniden denemeyi de güvenli kılar: aynı `reference_id` ve aynı fatura koşullarıyla tekrar oluşturursanız kopya yerine mevcut faturayı alırsınız; farklı koşullar ise `409 reference_id_conflict` API hatasıyla başarısız olur.
 

@@ -88,7 +88,7 @@ $invoice = $invoq->invoices->create([
 ```
 
 Use a server-side amount. Do not trust client-supplied amounts. `amount` is a
-decimal USD string from `'0.01'` to `'999.99'` with up to 2 decimal places, such
+decimal USD string from `'0.01'` to `'1000000.00'` with up to 2 decimal places, such
 as `'129'` or `'129.99'`.
 
 Use a stable `reference_id` to map `invoice.paid` webhooks back to your order.
