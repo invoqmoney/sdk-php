@@ -16,7 +16,7 @@ final class InvoicesResource
     }
 
     /**
-     * @param array{amount: string, currency?: string, description?: string, reference_id?: string, return_url?: string|null} $input
+     * @param array{amount: string, description?: string, reference_id?: string, return_url?: string|null} $input
      * @return array<string, mixed>
      */
     public function create(array $input): array
@@ -69,13 +69,12 @@ final class InvoicesResource
      */
     private static function createInvoiceRequestBody(array $input): array
     {
+        // Only these four fields exist: the API rejects unknown body keys, and
+        // currency (always USD) and mode (from the key) are not request fields.
+        // Anything else the caller passes is dropped here, not forwarded.
         $body = [
             'amount' => self::requiredRequestString($input['amount'] ?? null, 'amount'),
         ];
-
-        if (array_key_exists('currency', $input)) {
-            $body['currency'] = $input['currency'];
-        }
 
         self::copyOptionalStringField($input, $body, 'description');
         self::copyOptionalStringField($input, $body, 'reference_id');

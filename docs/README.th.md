@@ -36,6 +36,7 @@ composer require invoq/invoq-php
 1. เข้าสู่ระบบ[แดชบอร์ด invoq](https://app.invoq.money) แล้วสร้างโปรเจกต์
 2. ที่หน้า **API keys** สร้างคีย์ลับ (secret key) ขึ้นมา คีย์ทดสอบขึ้นต้นด้วย `sk_test_` คีย์จริงขึ้นต้นด้วย `sk_live_`
 3. ในการตั้งค่า **webhooks** ของโปรเจกต์ บันทึก URL ของ webhook ที่จะใช้ ซีเคร็ตของ webhook (`whsec_...`) สำหรับโหมดนั้นจะแสดงแค่ครั้งเดียวตอนเปิดใช้ webhook ครั้งแรก — รีบเก็บไว้ทันที
+4. ตั้งค่า **Receiving wallet** ของคุณก่อนเปิดใช้งานจริง ใบแจ้งหนี้ทดสอบไม่ต้องใช้ แต่ใบแจ้งหนี้จริงที่ไม่มีปลายทางให้เงินเข้าจะล้มเหลวด้วย `409 no_payment_options_available`
 
 เพิ่มทั้งสองค่าเข้าเป็นตัวแปรสภาพแวดล้อมของเซิร์ฟเวอร์:
 
@@ -76,20 +77,19 @@ $invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
 ```php
 $invoice = $invoq->invoices->create([
     'amount' => '129',
-    'currency' => 'USD',
     'description' => 'SaaS boilerplate',
     'reference_id' => 'order_1234',
     'return_url' => 'https://merchant.test/thanks',
 ]);
 ```
 
-กำหนดยอดเงินจากฝั่งเซิร์ฟเวอร์ อย่าเชื่อยอดเงินที่ส่งมาจากฝั่งไคลเอนต์ `amount` เป็นสตริงเลขทศนิยมสกุล USD ตั้งแต่ `'0.01'` ถึง `'1000000.00'` ทศนิยมไม่เกิน 2 ตำแหน่ง เช่น `'129'` หรือ `'129.99'`
+กำหนดยอดเงินจากฝั่งเซิร์ฟเวอร์ อย่าเชื่อยอดเงินที่ส่งมาจากฝั่งไคลเอนต์ `amount` เป็นสตริงเลขทศนิยมสกุล USD ตั้งแต่ `'0.01'` ถึง `'1000000.00'` ทศนิยมไม่เกิน 2 ตำแหน่ง เช่น `'129'` หรือ `'129.99'` สกุลเงินเป็น USD เสมอ ส่วนโหมดทดสอบหรือโหมดจริงมาจากคีย์ ทั้งสองอย่างไม่ใช่ฟิลด์ใน request
 
 ใช้ `reference_id` ที่คงที่เพื่อโยง webhook `invoice.paid` กลับไปหาคำสั่งซื้อของคุณ และยังทำให้การสร้างใบแจ้งหนี้ลองใหม่ได้อย่างปลอดภัย: ถ้าสร้างซ้ำด้วย `reference_id` เดิมและเงื่อนไขของใบแจ้งหนี้เดิม จะได้ใบแจ้งหนี้ใบเดิมกลับมาแทนที่จะเกิดใบซ้ำ ส่วนเงื่อนไขที่ต่างกันจะล้มเหลวด้วยข้อผิดพลาด API `409 reference_id_conflict`
 
-`description` และ `reference_id` เป็นสตริงใน request ที่จะระบุหรือไม่ก็ได้ หากไม่ได้ตั้งค่าให้ละไว้ อย่าส่งเป็น `null` ส่วน `return_url` จะระบุหรือไม่ก็ได้ และเป็นได้ทั้งสตริงหรือ `null`
+`amount`, `description`, `reference_id` และ `return_url` คือฟิลด์ทั้งหมดที่มีใน request `description` และ `reference_id` เป็นสตริงใน request ที่จะระบุหรือไม่ก็ได้ หากไม่ได้ตั้งค่าให้ละไว้ อย่าส่งเป็น `null` ส่วน `return_url` จะระบุหรือไม่ก็ได้ และเป็นได้ทั้งสตริงหรือ `null` คีย์อื่นใดที่คุณส่งเข้ามาจะถูกตัดทิ้งแทนที่จะถูกส่งออกไป เพราะ API จะปฏิเสธคีย์ที่ไม่รู้จักใน body ด้วย `400 invalid_request` และ `fields[].code: "unknown_field"`
 
-SDK จะคืนออบเจกต์ `data` ของ response กลับมาโดยตรงเป็น associative array
+SDK จะคืนออบเจกต์ `data` ของ response กลับมาโดยตรงเป็น associative array ซึ่งบรรจุข้อมูลสรุปของใบแจ้งหนี้ บวก `status`, `checkout_status`, `payment_revision`, `amount_due`, `amount_overpaid`, `monitoring_ends_at` และ `payment_options`
 
 ## ดึงข้อมูลใบแจ้งหนี้
 
@@ -97,9 +97,13 @@ SDK จะคืนออบเจกต์ `data` ของ response กลั�
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` จะคืนรูปแบบใบแจ้งหนี้สาธารณะที่หน้า checkout ใช้ โดยมีฟิลด์ต่าง ๆ เช่น `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` และ `direct_onchain_rails` แต่ไม่มี `reference_id` ถ้าต้องใช้ `reference_id` ฝั่ง merchant ให้ใช้ response ตอนสร้างใบแจ้งหนี้หรือ webhook `invoice.paid`
+`get()` จะคืนรูปแบบใบแจ้งหนี้สาธารณะที่หน้า checkout ใช้ คือรูปแบบเดียวกับตอนสร้าง บวก `project`, `amount_paid` และ `transfers` แต่ไม่มี `reference_id` ถ้าต้องใช้ `reference_id` ฝั่ง merchant ให้ใช้ response ตอนสร้างใบแจ้งหนี้หรือ webhook `invoice.paid`
 
-ยอดเงินในการตอบกลับจะถูกปรับให้เป็นรูปแบบมาตรฐานโดย API: สร้างด้วย `'129'` ใบแจ้งหนี้จะตอบกลับ `amount: '129.0000'` เวลาจะเทียบยอดเงินให้เทียบเป็นตัวเลข อย่าเทียบเป็นสตริง `amount_due` คำนวณจาก `max(amount - amount_paid, 0)` และใช้สเกลทศนิยม 18 ตำแหน่งเหมือน `amount_paid` ขณะที่ `amount_overpaid` เป็นภาพสะท้อนของมัน คือ `max(amount_paid - amount, 0)` คุณจึงไม่ต้องลบเงินเอง `monitoring_status` มีค่าเป็น `'active'` หรือ `'ended'` — พอเป็น `'ended'` แล้ว ที่อยู่รับเงินจะไม่ถูกเฝ้าดูอีกต่อไป — ส่วน `transfers` คือรายการรับเงินบนเชนที่ยืนยันแล้ว (แต่ละรายการมี `tx_hash`, `amount` และ `explorer_tx_url`) ทั้งคู่จะเป็น `null` / `[]` สำหรับใบแจ้งหนี้ทดสอบ
+มีฟิลด์สถานะสองตัว `status` คือสถานะทางบัญชี ได้แก่ `unpaid`, `partially_paid`, `paid`, `settling`, `settled`, `review_required` โดยสามค่าที่ถือว่าชำระแล้วต่างกันแค่ว่าเงินเดินทางไปถึงกระเป๋าเงินของคุณไกลแค่ไหน ส่วน `checkout_status` คือสถานะที่ผู้จ่ายเห็น ได้แก่ `open`, `confirming`, `expired`, `paid`, `unavailable` และไม่เคยเป็นสิ่งที่อนุญาตให้จัดการคำสั่งซื้อ `payment_revision` เป็นจำนวนเต็มไม่ติดลบที่เพิ่มขึ้นทุกครั้งที่ชุดการชำระเงินที่ยืนยันแล้วเปลี่ยนไป คุณจึงทิ้งสแนปช็อตที่เก่ากว่าของที่ถืออยู่ได้
+
+ยอดเงินในการตอบกลับจะถูกปรับให้เป็นรูปแบบมาตรฐานโดย API: สร้างด้วย `'129'` ใบแจ้งหนี้จะตอบกลับ `amount: '129.0000'` เวลาจะเทียบยอดเงินให้เทียบเป็นตัวเลข อย่าเทียบเป็นสตริง `amount_due` คำนวณจาก `max(amount - amount_paid, 0)` และใช้สเกลทศนิยม 18 ตำแหน่งเหมือน `amount_paid` ขณะที่ `amount_overpaid` เป็นภาพสะท้อนของมัน คือ `max(amount_paid - amount, 0)` คุณจึงไม่ต้องลบเงินเอง
+
+`payment_options` เก็บคำสั่งการชำระเงินไว้ ถูกกำหนดตายตัวตอนสร้างและเป็น `[]` ในโหมดทดสอบ แต่ละรายการแยกด้วย `status` แล้วจึงแยกด้วย `collection_method` มีเฉพาะ `'ready'` ที่จ่ายได้ `'evm_deposit'` จะมี `deposit_address` และ `suggested_amount` ส่วน `'direct_exact'` จะมี `recipient_address` และ `exact_amount` ที่ผู้ซื้อต้องโอนให้ตรงทุกหลัก ให้ระบุตัวเลือกด้วย `(chain_namespace, chain_reference, token_address)` อย่าอ้างอิงจากตำแหน่งของมันในอาร์เรย์ `monitoring_ends_at` เป็นเวลาปิดช่วงรับชำระเงิน และเป็น `null` ในโหมดทดสอบ ส่วน `transfers` คือรายการรับเงินที่ยืนยันแล้ว — `transaction_id`, `event_index`, `amount`, `explorer_transaction_url` — และเป็น `[]` จนกว่าจะมีการชำระเงินที่ยืนยันแล้ว รายละเอียดทุกฟิลด์: [เอกสาร REST API](https://github.com/invoqmoney/api)
 
 ## สร้างการชำระเงินทดสอบ
 
@@ -114,7 +118,7 @@ endpoint นี้ต้องใช้คีย์ลับทดสอบ แ�
 
 `reference_id` เป็นสตริงใน request ที่จะระบุหรือไม่ก็ได้ หากไม่ได้ตั้งค่าให้ละไว้ อย่าส่งเป็น `null`
 
-SDK จะคืนออบเจกต์ `data` ของ response กลับมาโดยตรงเป็น associative array
+SDK จะคืนออบเจกต์ `data` ของ response กลับมาโดยตรงเป็น associative array คือรูปแบบเดียวกับตอนสร้าง บวก `amount_paid` และ `fully_paid_at`
 
 ## ตรวจสอบ webhook
 
@@ -124,6 +128,7 @@ SDK จะคืนออบเจกต์ `data` ของ response กลั�
 <?php
 
 use function Invoq\isInvoicePaid;
+use function Invoq\isInvoicePaymentReversed;
 use function Invoq\verifyWebhook;
 
 $rawBody = file_get_contents('php://input');
@@ -141,6 +146,8 @@ if (isInvoicePaid($event)) {
     }
 
     fulfillOrder($orderId);
+} elseif (isInvoicePaymentReversed($event)) {
+    holdOrder($event['data']['invoice']['reference_id']);
 }
 
 http_response_code(200);
@@ -150,7 +157,13 @@ http_response_code(200);
 
 `verifyWebhook` ไม่จำเป็นต้องใช้ `new Invoq(...)` หรือคีย์ลับ API ของ invoq ให้ใช้ซีเคร็ต webhook ของคุณ ไม่ใช่ `INVOQ_SECRET_KEY`
 
-ให้จัดการคำสั่งซื้อจาก webhook ที่ผ่านการตรวจสอบแล้ว ไม่ใช่จากผลการชำระเงินในเบราว์เซอร์ `isInvoicePaid($event)` จะคืนค่า true สำหรับเหตุการณ์ `invoice.paid` ที่จัดการคำสั่งซื้อได้ ซึ่งใบแจ้งหนี้มีสถานะเป็น `paid`, `settling` หรือ `settled` และจะปฏิเสธ `review_required` จัดการคำสั่งซื้อให้ปลอดภัยเมื่อรับซ้ำ เพราะการส่ง webhook ที่ล้มเหลวจะถูกส่งซ้ำ
+ให้จัดการคำสั่งซื้อจาก webhook ที่ผ่านการตรวจสอบแล้ว ไม่ใช่จากผลการชำระเงินในเบราว์เซอร์ `isInvoicePaid($event)` จะคืนค่า true สำหรับเหตุการณ์ `invoice.paid` ที่จัดการคำสั่งซื้อได้ ซึ่งใบแจ้งหนี้มีสถานะเป็น `paid`, `settling` หรือ `settled` และจะปฏิเสธ `review_required`
+
+invoq จะส่ง `invoice.payment_reversed` ด้วย เมื่อใบแจ้งหนี้ที่เคยชำระแล้วกลับลงมาต่ำกว่ายอดอีกครั้ง เช่น เมื่อการ reorg ของเชนทำให้ธุรกรรมที่ยืนยันแล้วหลุดไป ให้ดักด้วย `isInvoicePaymentReversed($event)` แล้วพักหรือย้อนการจัดการคำสั่งซื้อตามนโยบายของคุณเอง helper ตัวนี้จงใจรับใบแจ้งหนี้ทุกสถานะ เพราะการทิ้งเหตุการณ์ย้อนเงินไปจะทำให้คำสั่งซื้อถูกจัดการค้างอยู่บนการชำระเงินที่ไม่มีอยู่แล้ว ส่วนชนิดเหตุการณ์ที่ SDK เวอร์ชันนี้ยังไม่รู้จักก็ยังผ่านการตรวจลายเซ็นและถูกคืนมาตามเดิม
+
+เหตุการณ์ทั้งสองแบบมี `data['invoice']` หน้าตาเหมือนกัน คือ `id`, `mode`, `status`, `amount`, `currency`, `amount_paid`, `reference_id`, `payment_revision` และ `fully_paid_at` ส่วนคำสั่งการชำระเงินและ `return_url` จงใจไม่ใส่มาให้ — ให้กระทบยอดด้วย id ของใบแจ้งหนี้คู่กับ `reference_id`
+
+จัดการคำสั่งซื้อให้ปลอดภัยเมื่อรับซ้ำ การตอบกลับที่ไม่ใช่ 2xx ทุกครั้ง — รวมถึง redirect และ `4xx` ด้วย — บวกกับข้อผิดพลาดของเครือข่ายและการหมดเวลารอ จะถูกส่งซ้ำตามลำดับขั้นที่จำกัดไว้ คือ 1 นาที, 5 นาที, 30 นาที แล้ว 2 ชั่วโมง รวมทั้งหมดห้าครั้ง ปลายทางของคุณจึงอาจได้รับเหตุการณ์เดียวกันมากกว่าหนึ่งครั้ง การส่งยังมาถึงแบบสลับลำดับได้ด้วย ให้เก็บสแนปช็อตที่ `payment_revision` สูงสุดไว้
 
 ## การจัดการข้อผิดพลาด
 
@@ -161,7 +174,7 @@ use Invoq\InvoqApiError;
 use Invoq\InvoqError;
 
 try {
-    $invoq->invoices->create(['amount' => '0.001', 'currency' => 'USD']);
+    $invoq->invoices->create(['amount' => '0.001']);
 } catch (InvoqApiError $error) {
     error_log((string) $error->status);
     error_log((string) $error->getApiCode());

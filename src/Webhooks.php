@@ -71,29 +71,60 @@ final class Webhooks
      */
     public static function isInvoicePaid(array $event): bool
     {
+        $invoice = self::lifecycleEventInvoice($event, 'invoice.paid');
+
+        // Paid-equivalent statuses only: review_required has money against it
+        // but is not cleared for fulfillment.
+        return $invoice !== null && self::isInvoicePaidStatus($invoice['status'] ?? null);
+    }
+
+    /**
+     * @param array<string, mixed> $event
+     */
+    public static function isInvoicePaymentReversed(array $event): bool
+    {
+        // No status check, unlike the paid guard: rejecting an unrecognized
+        // status would drop the event and leave the order fulfilled on a
+        // payment that no longer exists.
+        return self::lifecycleEventInvoice($event, 'invoice.payment_reversed') !== null;
+    }
+
+    /**
+     * The fields both lifecycle events share, returned so each guard can apply
+     * its own status rule. null when this is not a well-formed event of that
+     * type.
+     *
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>|null
+     */
+    private static function lifecycleEventInvoice(array $event, string $type): ?array
+    {
         if (
-            ($event['type'] ?? null) !== 'invoice.paid'
+            ($event['type'] ?? null) !== $type
             || !is_string($event['id'] ?? null)
             || !self::isInvoiceMode($event['mode'] ?? null)
             || !is_string($event['created_at'] ?? null)
             || !is_array($event['data'] ?? null)
             || !is_array($event['data']['invoice'] ?? null)
         ) {
-            return false;
+            return null;
         }
 
         $invoice = $event['data']['invoice'];
 
-        return is_string($invoice['id'] ?? null)
+        $valid = is_string($invoice['id'] ?? null)
             && self::isInvoiceMode($invoice['mode'] ?? null)
-            && self::isInvoicePaidStatus($invoice['status'] ?? null)
+            && is_string($invoice['status'] ?? null)
             && is_string($invoice['amount'] ?? null)
             && ($invoice['currency'] ?? null) === 'USD'
             && is_string($invoice['amount_paid'] ?? null)
             && array_key_exists('reference_id', $invoice)
             && (is_string($invoice['reference_id']) || $invoice['reference_id'] === null)
+            && is_int($invoice['payment_revision'] ?? null)
             && array_key_exists('fully_paid_at', $invoice)
             && (is_string($invoice['fully_paid_at']) || $invoice['fully_paid_at'] === null);
+
+        return $valid ? $invoice : null;
     }
 
     /**

@@ -20,3 +20,11 @@ function isInvoicePaid(array $event): bool
 {
     return Webhooks::isInvoicePaid($event);
 }
+
+/**
+ * @param array<string, mixed> $event
+ */
+function isInvoicePaymentReversed(array $event): bool
+{
+    return Webhooks::isInvoicePaymentReversed($event);
+}

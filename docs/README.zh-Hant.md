@@ -36,6 +36,7 @@ composer require invoq/invoq-php
 1. 登入 [invoq 商家後台](https://app.invoq.money)，建立一個專案。
 2. 在 **API keys** 頁面建立一組私密金鑰（secret key）。測試金鑰以 `sk_test_` 開頭，正式金鑰以 `sk_live_` 開頭。
 3. 在專案的 **webhooks** 設定裡儲存你的 webhook URL。對應模式的 webhook 簽章金鑰（`whsec_...`）只在首次啟用 webhook 時顯示一次——記得馬上存好。
+4. 上線前先設定 **Receiving wallet**。測試帳單不需要它；沒有結算去向的正式帳單會以 `409 no_payment_options_available` 失敗。
 
 把兩者都加進伺服器的環境變數：
 
@@ -76,20 +77,19 @@ $invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
 ```php
 $invoice = $invoq->invoices->create([
     'amount' => '129',
-    'currency' => 'USD',
     'description' => 'SaaS boilerplate',
     'reference_id' => 'order_1234',
     'return_url' => 'https://merchant.test/thanks',
 ]);
 ```
 
-金額要由伺服器端決定，不要相信用戶端傳來的金額。`amount` 是 `'0.01'` 到 `'1000000.00'` 之間的十進位美元字串，最多兩位小數，例如 `'129'` 或 `'129.99'`。
+金額要由伺服器端決定，不要相信用戶端傳來的金額。`amount` 是 `'0.01'` 到 `'1000000.00'` 之間的十進位美元字串，最多兩位小數，例如 `'129'` 或 `'129.99'`。幣別恆為 USD，測試還是正式由金鑰決定——兩者都不是請求欄位。
 
 用一個穩定的 `reference_id`，把 `invoice.paid` webhook 對應回你的訂單。它也讓建立動作可以放心重試：用相同的 `reference_id` 和相同的帳單條件再建立一次，回傳的是既有帳單而不是重複開單；條件不同則會回 `409 reference_id_conflict` API 錯誤。
 
-`description` 和 `reference_id` 是可選的請求字串。不用時直接省略，不要傳 `null`。`return_url` 是可選的，可以是字串或 `null`。
+`amount`、`description`、`reference_id` 和 `return_url` 是僅有的請求欄位。`description` 和 `reference_id` 是可選的請求字串。不用時直接省略，不要傳 `null`。`return_url` 是可選的，可以是字串或 `null`。你傳的其他鍵會被丟棄而不會送出，因為 API 會以 `400 invalid_request` 和 `fields[].code: "unknown_field"` 拒絕未知的 body 鍵。
 
-SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳。
+SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳。它帶有帳單摘要，外加 `status`、`checkout_status`、`payment_revision`、`amount_due`、`amount_overpaid`、`monitoring_ends_at` 和 `payment_options`。
 
 ## 查詢帳單
 
@@ -97,9 +97,13 @@ SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳。
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` 回傳結帳頁使用的公開帳單結構。它包含 `amount_paid`、`amount_due`、`amount_overpaid`、`payment_status`、`project`、`deposit_address`、`monitoring_ends_at`、`monitoring_status`、`transfers`、`direct_onchain_rails` 等欄位，但不包含 `reference_id`。如果需要商家端的 `reference_id`，請使用建立帳單的回應或 `invoice.paid` webhook。
+`get()` 回傳結帳頁使用的公開帳單結構：即建立回應的結構，加上 `project`、`amount_paid` 和 `transfers`，去掉 `reference_id`。如果需要商家端的 `reference_id`，請使用建立帳單的回應或 `invoice.paid` webhook。
 
-回應裡的金額由 API 統一格式化：用 `'129'` 建立，帳單回傳 `amount: '129.0000'`。比較金額請按數值比，不要按字串比。`amount_due` 依 `max(amount - amount_paid, 0)` 衍生，使用和 `amount_paid` 相同的 18 位小數 scale；`amount_overpaid` 與它互為鏡像，即 `max(amount_paid - amount, 0)`，所以你不必自己做減法。`monitoring_status` 取值 `'active'` 或 `'ended'`——一旦變為 `'ended'`，收款位址就不再被監控——而 `transfers` 是已確認的鏈上收款紀錄（每一項都含 `tx_hash`、`amount` 和 `explorer_tx_url`）。測試帳單裡兩者分別為 `null` / `[]`。
+帳單有兩個狀態欄位。`status` 是記帳狀態——`unpaid`、`partially_paid`、`paid`、`settling`、`settled`、`review_required`，其中三個等同已付款的取值只差在資金離你的錢包還有多遠。`checkout_status` 是付款人看到的狀態——`open`、`confirming`、`expired`、`paid`、`unavailable`——它從不構成履約依據。`payment_revision` 是一個非負整數，每當已確認的付款集合改變就加一，你可以據此丟掉比手上更舊的快照。
+
+回應裡的金額由 API 統一格式化：用 `'129'` 建立，帳單回傳 `amount: '129.0000'`。比較金額請按數值比，不要按字串比。`amount_due` 依 `max(amount - amount_paid, 0)` 衍生，使用和 `amount_paid` 相同的 18 位小數 scale；`amount_overpaid` 與它互為鏡像，即 `max(amount_paid - amount, 0)`，所以你不必自己做減法。
+
+`payment_options` 裝的是付款指示，建立時即固定，測試模式下為 `[]`。每一項先看 `status`，再看 `collection_method`：只有 `'ready'` 可付，`'evm_deposit'` 帶 `deposit_address` 和 `suggested_amount`，`'direct_exact'` 帶 `recipient_address` 以及買家必須一位不差轉出的 `exact_amount`。要辨識某一項請用 `(chain_namespace, chain_reference, token_address)`，絕不要用它在陣列裡的位置。`monitoring_ends_at` 標記付款視窗的關閉時間，測試模式下為 `null`。`transfers` 是已確認的收款紀錄——`transaction_id`、`event_index`、`amount`、`explorer_transaction_url`——在有付款確認前一直是 `[]`。完整欄位說明見 [REST API 文件](https://github.com/invoqmoney/api)。
 
 ## 建立測試付款
 
@@ -114,7 +118,7 @@ $paidInvoice = $invoq->invoices->createTestPayment($invoice['id'], [
 
 `reference_id` 是可選的請求字串。不用時直接省略，不要傳 `null`。
 
-SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳。
+SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳：即建立回應的結構，加上 `amount_paid` 和 `fully_paid_at`。
 
 ## 驗證 webhook
 
@@ -124,6 +128,7 @@ SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳。
 <?php
 
 use function Invoq\isInvoicePaid;
+use function Invoq\isInvoicePaymentReversed;
 use function Invoq\verifyWebhook;
 
 $rawBody = file_get_contents('php://input');
@@ -141,6 +146,8 @@ if (isInvoicePaid($event)) {
     }
 
     fulfillOrder($orderId);
+} elseif (isInvoicePaymentReversed($event)) {
+    holdOrder($event['data']['invoice']['reference_id']);
 }
 
 http_response_code(200);
@@ -150,7 +157,13 @@ webhook 驗簽失敗會擲出 `InvoqSignatureVerificationError`。`verifyWebhook
 
 `verifyWebhook` 不需要 `new Invoq(...)`，也不需要你的 invoq API 金鑰。用的是你的 webhook 簽章金鑰，而不是 `INVOQ_SECRET_KEY`。
 
-訂單要憑驗證過的 webhook 來處理，而不是瀏覽器端的結帳結果。`isInvoicePaid($event)` 對可履約的 `invoice.paid` 事件回傳 true——即帳單狀態為 `paid`、`settling` 或 `settled`；它會拒絕 `review_required`。webhook 投遞失敗會重試，所以履約邏輯要做成冪等的。
+訂單要憑驗證過的 webhook 來處理，而不是瀏覽器端的結帳結果。`isInvoicePaid($event)` 對可履約的 `invoice.paid` 事件回傳 true——即帳單狀態為 `paid`、`settling` 或 `settled`；它會拒絕 `review_required`。
+
+帳單從已付款跌回不足額時，invoq 還會發 `invoice.payment_reversed`——例如鏈重組把一筆已確認的轉帳拿掉了。用 `isInvoicePaymentReversed($event)` 接住它，再依你自己的策略暫停或撤銷履約。這個判斷有意接受任何帳單狀態：漏掉一次回退，會讓訂單基於一筆已經不存在的付款完成履約。本版 SDK 尚未建模的事件型別同樣能通過驗簽，並原樣回傳。
+
+兩種事件帶的 `data['invoice']` 完全一樣：`id`、`mode`、`status`、`amount`、`currency`、`amount_paid`、`reference_id`、`payment_revision` 和 `fully_paid_at`。付款指示和 `return_url` 依設計不會出現——請用帳單 id 加 `reference_id` 來對帳。
+
+履約邏輯要做成冪等的。投遞收到的每一個非 2xx 回應——包括重新導向和 `4xx`——以及網路錯誤和逾時都會重試，重試節奏是固定的：間隔依序為 1 分鐘、5 分鐘、30 分鐘、2 小時，總共五次，所以你的端點可能會多次收到同一個事件。送達順序也不保證：請保留 `payment_revision` 最大的那份快照。
 
 ## 錯誤處理
 
@@ -161,7 +174,7 @@ use Invoq\InvoqApiError;
 use Invoq\InvoqError;
 
 try {
-    $invoq->invoices->create(['amount' => '0.001', 'currency' => 'USD']);
+    $invoq->invoices->create(['amount' => '0.001']);
 } catch (InvoqApiError $error) {
     error_log((string) $error->status);
     error_log((string) $error->getApiCode());

@@ -36,6 +36,7 @@ Yêu cầu PHP 8.1 trở lên.
 1. Đăng nhập [bảng điều khiển invoq](https://app.invoq.money) và tạo một dự án.
 2. Ở trang **API keys**, tạo một khóa bí mật. Khóa thử nghiệm bắt đầu bằng `sk_test_`, khóa thật bằng `sk_live_`.
 3. Trong phần cài đặt **webhooks** của dự án, lưu URL webhook của bạn. Mã bí mật của webhook (`whsec_...`) cho chế độ đó chỉ hiện đúng một lần, lúc bạn bật webhook lần đầu — hãy lưu lại ngay.
+4. Thiết lập **Receiving wallet** của bạn trước khi lên live. Hóa đơn thử nghiệm không cần ví này; hóa đơn live không có nơi để tất toán sẽ lỗi `409 no_payment_options_available`.
 
 Thêm cả hai vào biến môi trường của máy chủ:
 
@@ -76,20 +77,19 @@ $invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
 ```php
 $invoice = $invoq->invoices->create([
     'amount' => '129',
-    'currency' => 'USD',
     'description' => 'SaaS boilerplate',
     'reference_id' => 'order_1234',
     'return_url' => 'https://merchant.test/thanks',
 ]);
 ```
 
-Dùng số tiền do máy chủ quyết định. Đừng tin số tiền phía client gửi lên. `amount` là chuỗi thập phân USD từ `'0.01'` đến `'1000000.00'`, tối đa 2 chữ số lẻ, ví dụ `'129'` hoặc `'129.99'`.
+Dùng số tiền do máy chủ quyết định. Đừng tin số tiền phía client gửi lên. `amount` là chuỗi thập phân USD từ `'0.01'` đến `'1000000.00'`, tối đa 2 chữ số lẻ, ví dụ `'129'` hoặc `'129.99'`. Đơn vị tiền luôn là USD, còn thử nghiệm hay live thì do khóa quyết định — cả hai đều không phải trường trong request.
 
 Dùng một `reference_id` ổn định để nối webhook `invoice.paid` về đúng đơn hàng của bạn. Nó cũng giúp thao tác tạo an toàn khi thử lại: tạo lại với cùng `reference_id` và cùng nội dung hóa đơn sẽ trả về hóa đơn đã có thay vì tạo trùng; nếu nội dung khác nhau, API sẽ báo lỗi `409 reference_id_conflict`.
 
-`description` và `reference_id` là các chuỗi tùy chọn trong request. Bỏ qua chúng khi không dùng; đừng truyền `null`. `return_url` là tùy chọn và có thể là chuỗi hoặc `null`.
+`amount`, `description`, `reference_id` và `return_url` là toàn bộ các trường của request. `description` và `reference_id` là các chuỗi tùy chọn trong request. Bỏ qua chúng khi không dùng; đừng truyền `null`. `return_url` là tùy chọn và có thể là chuỗi hoặc `null`. Mọi khóa khác bạn truyền vào sẽ bị loại bỏ chứ không được gửi đi, vì API từ chối các khóa lạ trong body với `400 invalid_request` và `fields[].code: "unknown_field"`.
 
-SDK trả về trực tiếp đối tượng `data` của phản hồi dưới dạng mảng kết hợp (associative array).
+SDK trả về trực tiếp đối tượng `data` của phản hồi dưới dạng mảng kết hợp (associative array). Mảng này chứa phần tóm tắt hóa đơn cùng với `status`, `checkout_status`, `payment_revision`, `amount_due`, `amount_overpaid`, `monitoring_ends_at` và `payment_options`.
 
 ## Lấy thông tin hóa đơn
 
@@ -97,9 +97,13 @@ SDK trả về trực tiếp đối tượng `data` của phản hồi dưới d
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` trả về dạng hóa đơn công khai mà trang checkout sử dụng. Nó bao gồm các trường như `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` và `direct_onchain_rails`, nhưng không bao gồm `reference_id`. Hãy dùng phản hồi tạo hóa đơn hoặc webhook `invoice.paid` khi bạn cần `reference_id` phía merchant.
+`get()` trả về dạng hóa đơn công khai mà trang checkout sử dụng: dạng phản hồi khi tạo, cộng thêm `project`, `amount_paid` và `transfers`, và bỏ `reference_id`. Hãy dùng phản hồi tạo hóa đơn hoặc webhook `invoice.paid` khi bạn cần `reference_id` phía merchant.
 
-Số tiền trong phản hồi được API chuẩn hóa: tạo với `'129'` thì hóa đơn trả về `amount: '129.0000'`. So sánh số tiền theo giá trị số, đừng so sánh chuỗi. `amount_due` được tính là `max(amount - amount_paid, 0)` và dùng cùng thang 18 chữ số thập phân như `amount_paid`; `amount_overpaid` là bản đối xứng của nó, `max(amount_paid - amount, 0)`, nên bạn không bao giờ phải tự trừ tiền. `monitoring_status` là `'active'` hoặc `'ended'` — khi đã là `'ended'`, địa chỉ nạp tiền không còn được theo dõi nữa — còn `transfers` là danh sách biên nhận trên chuỗi đã xác nhận (mỗi mục có `tx_hash`, `amount` và `explorer_tx_url`). Cả hai đều là `null` / `[]` với hóa đơn thử nghiệm.
+Hai trường trạng thái. `status` là trạng thái kế toán — `unpaid`, `partially_paid`, `paid`, `settling`, `settled`, `review_required` — và ba giá trị coi như đã thanh toán chỉ khác nhau ở việc tiền đã đi được bao xa về ví của bạn. `checkout_status` là trạng thái người trả tiền thấy — `open`, `confirming`, `expired`, `paid`, `unavailable` — và không bao giờ là căn cứ xử lý đơn. `payment_revision` là một số nguyên không âm, tăng mỗi khi tập hợp thanh toán đã xác nhận thay đổi, nên bạn bỏ được bản chụp cũ hơn bản đang giữ.
+
+Số tiền trong phản hồi được API chuẩn hóa: tạo với `'129'` thì hóa đơn trả về `amount: '129.0000'`. So sánh số tiền theo giá trị số, đừng so sánh chuỗi. `amount_due` được tính là `max(amount - amount_paid, 0)` và dùng cùng thang 18 chữ số thập phân như `amount_paid`; `amount_overpaid` là bản đối xứng của nó, `max(amount_paid - amount, 0)`, nên bạn không bao giờ phải tự trừ tiền.
+
+`payment_options` chứa hướng dẫn thanh toán, cố định lúc tạo và `[]` ở chế độ thử nghiệm. Các mục phân biệt theo `status`, rồi `collection_method`: chỉ `'ready'` mới trả được, `'evm_deposit'` mang `deposit_address` và `suggested_amount`, `'direct_exact'` mang `recipient_address` và `exact_amount` mà người mua phải gửi đúng đến từng chữ số. Hãy nhận diện một tùy chọn bằng bộ `(chain_namespace, chain_reference, token_address)`, đừng bao giờ dựa vào vị trí của nó trong mảng. `monitoring_ends_at` đóng cửa sổ thanh toán và là `null` ở chế độ thử nghiệm. `transfers` là danh sách biên nhận đã xác nhận — `transaction_id`, `event_index`, `amount`, `explorer_transaction_url` — và vẫn là `[]` cho tới khi có thanh toán được xác nhận. Tham chiếu đầy đủ các trường: [tài liệu REST API](https://github.com/invoqmoney/api).
 
 ## Tạo thanh toán thử nghiệm
 
@@ -114,7 +118,7 @@ Endpoint này yêu cầu khóa bí mật thử nghiệm và chỉ hoạt động
 
 `reference_id` là một chuỗi tùy chọn trong request. Bỏ qua nó khi không dùng; đừng truyền `null`.
 
-SDK trả về trực tiếp đối tượng `data` của phản hồi dưới dạng mảng kết hợp.
+SDK trả về trực tiếp đối tượng `data` của phản hồi dưới dạng mảng kết hợp: dạng phản hồi khi tạo, cộng thêm `amount_paid` và `fully_paid_at`.
 
 ## Xác minh webhook
 
@@ -124,6 +128,7 @@ Truyền nội dung request gốc cho `verifyWebhook`. Đừng phân tích JSON 
 <?php
 
 use function Invoq\isInvoicePaid;
+use function Invoq\isInvoicePaymentReversed;
 use function Invoq\verifyWebhook;
 
 $rawBody = file_get_contents('php://input');
@@ -141,6 +146,8 @@ if (isInvoicePaid($event)) {
     }
 
     fulfillOrder($orderId);
+} elseif (isInvoicePaymentReversed($event)) {
+    holdOrder($event['data']['invoice']['reference_id']);
 }
 
 http_response_code(200);
@@ -150,7 +157,13 @@ Việc xác minh webhook thất bại sẽ ném `InvoqSignatureVerificationError
 
 `verifyWebhook` không cần `new Invoq(...)` hay khóa bí mật API của invoq. Hãy dùng mã bí mật webhook của bạn, không phải `INVOQ_SECRET_KEY`.
 
-Hãy xử lý đơn hàng từ webhook đã xác minh, không phải từ kết quả checkout trên trình duyệt. `isInvoicePaid($event)` trả về true cho các sự kiện `invoice.paid` có thể xử lý — tức là hóa đơn ở trạng thái `paid`, `settling` hoặc `settled`; nó từ chối `review_required`. Hãy xử lý đơn hàng một cách an toàn khi lặp lại, vì các lần gửi webhook thất bại sẽ được gửi lại.
+Hãy xử lý đơn hàng từ webhook đã xác minh, không phải từ kết quả checkout trên trình duyệt. `isInvoicePaid($event)` trả về true cho các sự kiện `invoice.paid` có thể xử lý — tức là hóa đơn ở trạng thái `paid`, `settling` hoặc `settled`; nó từ chối `review_required`.
+
+invoq cũng gửi `invoice.payment_reversed` khi một hóa đơn đã thanh toán tụt trở lại dưới số tiền của nó — chẳng hạn khi chuỗi reorg làm mất một giao dịch đã xác nhận. Bắt sự kiện đó bằng `isInvoicePaymentReversed($event)`, rồi tạm dừng hoặc hoàn tác việc xử lý theo chính sách của bạn. Hàm kiểm tra đó cố ý chấp nhận mọi trạng thái hóa đơn: bỏ qua một lần đảo chiều sẽ khiến đơn hàng vẫn được xử lý dựa trên một khoản thanh toán không còn tồn tại. Một loại sự kiện mà phiên bản SDK này chưa mô hình hóa vẫn qua được bước xác thực và được trả về nguyên trạng.
+
+Cả hai sự kiện đều mang cùng một `data['invoice']`: `id`, `mode`, `status`, `amount`, `currency`, `amount_paid`, `reference_id`, `payment_revision` và `fully_paid_at`. Hướng dẫn thanh toán và `return_url` cố tình không có ở đó — hãy đối soát bằng id hóa đơn cộng với `reference_id`.
+
+Hãy xử lý đơn hàng một cách an toàn khi lặp lại. Mọi phản hồi không phải 2xx cho một lần gửi — kể cả redirect và `4xx` — cùng với lỗi mạng và hết thời gian chờ đều được gửi lại theo một lịch có giới hạn: cách nhau 1 phút, 5 phút, 30 phút, rồi 2 giờ, tổng cộng năm lần, nên endpoint của bạn có thể nhận cùng một sự kiện nhiều lần. Thứ tự đến cũng không được đảm bảo: hãy giữ bản chụp có `payment_revision` cao nhất.
 
 ## Xử lý lỗi
 
@@ -161,7 +174,7 @@ use Invoq\InvoqApiError;
 use Invoq\InvoqError;
 
 try {
-    $invoq->invoices->create(['amount' => '0.001', 'currency' => 'USD']);
+    $invoq->invoices->create(['amount' => '0.001']);
 } catch (InvoqApiError $error) {
     error_log((string) $error->status);
     error_log((string) $error->getApiCode());

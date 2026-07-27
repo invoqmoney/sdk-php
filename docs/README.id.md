@@ -39,6 +39,9 @@ Membutuhkan PHP 8.1 atau lebih baru.
 3. Di pengaturan **webhooks** proyek Anda, simpan URL webhook Anda. Kunci rahasia
    webhook (`whsec_...`) untuk mode itu hanya ditampilkan sekali, saat webhook
    pertama kali diaktifkan — langsung simpan.
+4. Siapkan **Receiving wallet** Anda sebelum go live. Invoice uji coba tidak
+   membutuhkannya; invoice live tanpa tujuan penyelesaian gagal dengan
+   `409 no_payment_options_available`.
 
 Tambahkan keduanya ke lingkungan server Anda:
 
@@ -81,7 +84,6 @@ Request akan timeout setelah 10 detik secara bawaan; berikan `timeoutMs` untuk m
 ```php
 $invoice = $invoq->invoices->create([
     'amount' => '129',
-    'currency' => 'USD',
     'description' => 'SaaS boilerplate',
     'reference_id' => 'order_1234',
     'return_url' => 'https://merchant.test/thanks',
@@ -90,7 +92,8 @@ $invoice = $invoq->invoices->create([
 
 Tentukan jumlahnya di sisi server. Jangan percaya jumlah yang dikirim klien. `amount`
 adalah string desimal USD dari `'0.01'` sampai `'1000000.00'` dengan maksimal 2 angka di
-belakang koma, misalnya `'129'` atau `'129.99'`.
+belakang koma, misalnya `'129'` atau `'129.99'`. Mata uangnya selalu USD, dan mode uji
+coba atau live ditentukan oleh kuncinya — keduanya bukan field request.
 
 Pakai `reference_id` yang stabil untuk memetakan webhook `invoice.paid` kembali ke
 pesanan Anda. Ini juga membuat pembuatan invoice aman diulang: membuat lagi dengan
@@ -98,11 +101,16 @@ pesanan Anda. Ini juga membuat pembuatan invoice aman diulang: membuat lagi deng
 sudah ada, bukan duplikat; ketentuan yang berbeda gagal dengan error API
 `409 reference_id_conflict`.
 
-`description` dan `reference_id` adalah string request opsional. Hilangkan kalau tidak
-diisi; jangan berikan `null`. `return_url` opsional dan boleh berupa string atau
-`null`.
+`amount`, `description`, `reference_id`, dan `return_url` adalah satu-satunya field
+request. `description` dan `reference_id` adalah string request opsional. Hilangkan
+kalau tidak diisi; jangan berikan `null`. `return_url` opsional dan boleh berupa string
+atau `null`. Kunci lain yang Anda kirimkan akan dibuang, bukan dikirim, karena API
+menolak kunci body yang tidak dikenal dengan `400 invalid_request` dan
+`fields[].code: "unknown_field"`.
 
-SDK langsung mengembalikan objek `data` dari respons sebagai array asosiatif.
+SDK langsung mengembalikan objek `data` dari respons sebagai array asosiatif. Objek itu
+berisi ringkasan invoice ditambah `status`, `checkout_status`, `payment_revision`,
+`amount_due`, `amount_overpaid`, `monitoring_ends_at`, dan `payment_options`.
 
 ## Mengambil invoice
 
@@ -110,23 +118,37 @@ SDK langsung mengembalikan objek `data` dari respons sebagai array asosiatif.
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` mengembalikan bentuk invoice publik yang dipakai checkout. Ini mencakup field
-seperti `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`,
-`deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers`, dan
-`direct_onchain_rails`, tetapi tidak menyertakan `reference_id`. Gunakan respons
-pembuatan atau webhook `invoice.paid` saat Anda membutuhkan `reference_id`
-merchant Anda.
+`get()` mengembalikan bentuk invoice publik yang dipakai checkout: bentuk respons
+pembuatan ditambah `project`, `amount_paid`, dan `transfers`, dikurangi `reference_id`.
+Gunakan respons pembuatan atau webhook `invoice.paid` saat Anda membutuhkan
+`reference_id` merchant Anda.
+
+Dua field status. `status` adalah status pembukuan — `unpaid`, `partially_paid`, `paid`,
+`settling`, `settled`, `review_required` — dan tiga nilai yang berarti sudah dibayar
+hanya berbeda pada seberapa jauh dananya bergerak ke dompet Anda. `checkout_status`
+adalah status yang dilihat pembayar — `open`, `confirming`, `expired`, `paid`,
+`unavailable` — dan tidak pernah menjadi izin memproses pesanan. `payment_revision`
+adalah bilangan bulat non-negatif yang naik setiap kali kumpulan pembayaran
+terkonfirmasi berubah, jadi Anda bisa membuang snapshot yang lebih lama dari yang sudah
+Anda pegang.
 
 Jumlah di respons dinormalkan oleh API: buat dengan `'129'` dan invoice mengembalikan
 `amount: '129.0000'`. Bandingkan jumlah secara numerik, bukan sebagai string.
 `amount_due` diturunkan sebagai `max(amount - amount_paid, 0)` dan memakai skala 18
 desimal yang sama dengan `amount_paid`; `amount_overpaid` adalah kebalikannya,
 `max(amount_paid - amount, 0)`, jadi Anda tidak perlu mengurangkannya sendiri.
-`monitoring_status` bernilai `'active'` atau `'ended'` — begitu bernilai
-`'ended'`, alamat deposit tidak lagi dipantau — dan `transfers` adalah jejak
-penerimaan on-chain yang sudah terkonfirmasi (tiap entri punya `tx_hash`,
-`amount`, dan `explorer_tx_url`). Keduanya bernilai `null` / `[]` untuk invoice
-uji coba.
+
+`payment_options` berisi instruksi pembayarannya, ditetapkan saat pembuatan dan `[]` di
+mode uji coba. Tiap entri dibedakan oleh `status`, lalu `collection_method`: hanya
+`'ready'` yang bisa dibayar, `'evm_deposit'` membawa `deposit_address` dan
+`suggested_amount`, `'direct_exact'` membawa `recipient_address` dan `exact_amount` yang
+harus dikirim pembeli persis sampai digit terakhir. Identifikasi sebuah opsi lewat
+`(chain_namespace, chain_reference, token_address)`, jangan lewat posisinya di array.
+`monitoring_ends_at` menutup jendela pembayaran dan bernilai `null` di mode uji coba.
+`transfers` adalah jejak penerimaan terkonfirmasi — `transaction_id`, `event_index`,
+`amount`, `explorer_transaction_url` — dan tetap `[]` sampai ada pembayaran yang
+terkonfirmasi. Referensi field lengkap:
+[dokumen REST API](https://github.com/invoqmoney/api).
 
 ## Membuat pembayaran uji coba
 
@@ -145,7 +167,8 @@ webhook uji coba Anda. Jumlah parsial diperbolehkan dan menghasilkan `partially_
 `reference_id` adalah string request opsional. Hilangkan kalau tidak diisi; jangan
 berikan `null`.
 
-SDK langsung mengembalikan objek `data` dari respons sebagai array asosiatif.
+SDK langsung mengembalikan objek `data` dari respons sebagai array asosiatif: bentuk
+respons pembuatan ditambah `amount_paid` dan `fully_paid_at`.
 
 ## Memverifikasi webhook
 
@@ -156,6 +179,7 @@ meng-encode-nya lagi sebelum verifikasi.
 <?php
 
 use function Invoq\isInvoicePaid;
+use function Invoq\isInvoicePaymentReversed;
 use function Invoq\verifyWebhook;
 
 $rawBody = file_get_contents('php://input');
@@ -173,6 +197,8 @@ if (isInvoicePaid($event)) {
     }
 
     fulfillOrder($orderId);
+} elseif (isInvoicePaymentReversed($event)) {
+    holdOrder($event['data']['invoice']['reference_id']);
 }
 
 http_response_code(200);
@@ -188,8 +214,27 @@ Gunakan kunci rahasia webhook Anda, bukan `INVOQ_SECRET_KEY`.
 Proses pesanan dari webhook yang terverifikasi, bukan dari hasil checkout di browser.
 `isInvoicePaid($event)` mengembalikan true untuk event `invoice.paid` yang bisa
 diproses, yaitu yang status invoice-nya `paid`, `settling`, atau `settled`; fungsi ini
-menolak `review_required`. Tangani pemrosesan pesanan secara idempoten karena
-pengiriman webhook yang gagal akan diulang.
+menolak `review_required`.
+
+invoq juga mengirim `invoice.payment_reversed` ketika invoice yang tadinya lunas turun
+lagi di bawah jumlahnya — misalnya karena reorg rantai membatalkan transfer yang sudah
+terkonfirmasi. Tangkap event itu dengan `isInvoicePaymentReversed($event)`, lalu tahan
+atau batalkan pemrosesan sesuai kebijakan Anda sendiri. Penjaga itu sengaja menerima
+status invoice apa pun: membuang sebuah pembalikan akan menyisakan pesanan yang telanjur
+diproses atas pembayaran yang sudah tidak ada lagi. Tipe event yang belum dikenal versi
+SDK ini tetap lolos verifikasi dan dikembalikan apa adanya.
+
+Kedua event membawa `data['invoice']` yang sama: `id`, `mode`, `status`, `amount`,
+`currency`, `amount_paid`, `reference_id`, `payment_revision`, dan `fully_paid_at`.
+Instruksi pembayaran dan `return_url` sengaja tidak disertakan — rekonsiliasikan lewat
+id invoice ditambah `reference_id`.
+
+Tangani pemrosesan pesanan secara idempoten. Setiap respons non-2xx atas sebuah
+pengiriman — termasuk redirect dan `4xx` — ditambah error jaringan dan timeout akan
+diulang pada tangga terbatas 1 menit, 5 menit, 30 menit, lalu 2 jam, lima percobaan
+seluruhnya, jadi endpoint Anda bisa menerima event yang sama lebih dari sekali.
+Pengiriman juga bisa datang tidak berurutan: simpan snapshot dengan `payment_revision`
+tertinggi.
 
 ## Penanganan error
 
@@ -200,7 +245,7 @@ use Invoq\InvoqApiError;
 use Invoq\InvoqError;
 
 try {
-    $invoq->invoices->create(['amount' => '0.001', 'currency' => 'USD']);
+    $invoq->invoices->create(['amount' => '0.001']);
 } catch (InvoqApiError $error) {
     error_log((string) $error->status);
     error_log((string) $error->getApiCode());

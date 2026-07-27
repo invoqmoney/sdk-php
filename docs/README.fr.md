@@ -36,6 +36,7 @@ Nécessite PHP 8.1 ou plus récent.
 1. Connectez-vous au [tableau de bord invoq](https://app.invoq.money) et créez un projet.
 2. Sur la page **API keys**, créez une clé secrète. Les clés de test commencent par `sk_test_`, les clés de production par `sk_live_`.
 3. Dans les réglages **webhooks** de votre projet, enregistrez votre URL de webhook. Le secret du webhook (`whsec_...`) pour ce mode ne s’affiche qu’une seule fois, à la première activation du webhook — notez-le tout de suite.
+4. Configurez votre **Receiving wallet** avant de passer en production. Les factures de test n’en ont pas besoin ; une facture de production sans destination de règlement échoue avec `409 no_payment_options_available`.
 
 Ajoutez les deux à l’environnement de votre serveur :
 
@@ -76,20 +77,19 @@ $invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
 ```php
 $invoice = $invoq->invoices->create([
     'amount' => '129',
-    'currency' => 'USD',
     'description' => 'SaaS boilerplate',
     'reference_id' => 'order_1234',
     'return_url' => 'https://merchant.test/thanks',
 ]);
 ```
 
-Définissez le montant côté serveur. Ne faites pas confiance aux montants envoyés par le client. `amount` est une chaîne décimale en USD de `'0.01'` à `'1000000.00'`, avec au plus 2 décimales, comme `'129'` ou `'129.99'`.
+Définissez le montant côté serveur. Ne faites pas confiance aux montants envoyés par le client. `amount` est une chaîne décimale en USD de `'0.01'` à `'1000000.00'`, avec au plus 2 décimales, comme `'129'` ou `'129.99'`. La devise est toujours l’USD, et le mode test ou live vient de la clé : ni l’un ni l’autre n’est un champ de la requête.
 
 Utilisez un `reference_id` stable pour relier les webhooks `invoice.paid` à votre commande. Il permet aussi de relancer la création sans risque : si vous recréez avec le même `reference_id` et les mêmes conditions, vous récupérez la facture existante au lieu d’un doublon ; avec des conditions différentes, l’appel échoue avec une erreur d’API `409 reference_id_conflict`.
 
-`description` et `reference_id` sont des chaînes optionnelles dans la requête. Omettez-les lorsqu’elles ne sont pas définies ; ne passez pas `null`. `return_url` est optionnel et peut être une chaîne ou `null`.
+`amount`, `description`, `reference_id` et `return_url` sont les seuls champs de la requête. `description` et `reference_id` sont des chaînes optionnelles dans la requête. Omettez-les lorsqu’elles ne sont pas définies ; ne passez pas `null`. `return_url` est optionnel et peut être une chaîne ou `null`. Toute autre clé que vous passez est écartée plutôt qu’envoyée, car l’API rejette les clés de corps inconnues avec `400 invalid_request` et `fields[].code: "unknown_field"`.
 
-Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau associatif.
+Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau associatif. Il porte le résumé de la facture ainsi que `status`, `checkout_status`, `payment_revision`, `amount_due`, `amount_overpaid`, `monitoring_ends_at` et `payment_options`.
 
 ## Récupérez une facture
 
@@ -97,9 +97,13 @@ Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()` renvoie la forme de facture publique utilisée par la page de paiement. Elle inclut des champs tels que `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` et `direct_onchain_rails`, mais n’inclut pas `reference_id`. Utilisez la réponse de création ou le webhook `invoice.paid` quand vous avez besoin de votre `reference_id` marchand.
+`get()` renvoie la forme de facture publique utilisée par la page de paiement : la forme de la réponse de création, plus `project`, `amount_paid` et `transfers`, moins `reference_id`. Utilisez la réponse de création ou le webhook `invoice.paid` quand vous avez besoin de votre `reference_id` marchand.
 
-Les montants des réponses sont normalisés par l’API : créez avec `'129'` et la facture renvoie `amount: '129.0000'`. Comparez les montants numériquement, pas comme des chaînes. `amount_due` est dérivé sous la forme `max(amount - amount_paid, 0)` et utilise la même échelle à 18 décimales que `amount_paid` ; `amount_overpaid` en est le miroir, `max(amount_paid - amount, 0)`, si bien que vous n’avez jamais à soustraire d’argent vous-même. `monitoring_status` vaut `'active'` ou `'ended'` — une fois à `'ended'`, l’adresse de dépôt n’est plus surveillée — et `transfers` est le journal confirmé des encaissements on-chain (chaque entrée a `tx_hash`, `amount` et `explorer_tx_url`). Les deux valent `null` / `[]` pour les factures de test.
+Deux champs de statut. `status` est le statut comptable — `unpaid`, `partially_paid`, `paid`, `settling`, `settled`, `review_required` — et les trois valeurs assimilables à un paiement validé ne diffèrent que par l’avancement des fonds vers votre portefeuille. `checkout_status` est celui vu par le payeur — `open`, `confirming`, `expired`, `paid`, `unavailable` — et n’autorise jamais le traitement d’une commande. `payment_revision` est un entier positif ou nul qui augmente à chaque changement de l’ensemble des paiements confirmés, ce qui permet d’écarter un instantané plus ancien que celui que vous avez déjà.
+
+Les montants des réponses sont normalisés par l’API : créez avec `'129'` et la facture renvoie `amount: '129.0000'`. Comparez les montants numériquement, pas comme des chaînes. `amount_due` est dérivé sous la forme `max(amount - amount_paid, 0)` et utilise la même échelle à 18 décimales que `amount_paid` ; `amount_overpaid` en est le miroir, `max(amount_paid - amount, 0)`, si bien que vous n’avez jamais à soustraire d’argent vous-même.
+
+`payment_options` contient les instructions de paiement, figées à la création et `[]` en mode test. Les entrées se distinguent par `status`, puis par `collection_method` : seule `'ready'` est payable, `'evm_deposit'` porte `deposit_address` et `suggested_amount`, `'direct_exact'` porte `recipient_address` et un `exact_amount` que l’acheteur doit envoyer au chiffre près. Identifiez une option par `(chain_namespace, chain_reference, token_address)`, jamais par sa position dans le tableau. `monitoring_ends_at` ferme la fenêtre de paiement et vaut `null` en mode test. `transfers` est le journal confirmé des encaissements — `transaction_id`, `event_index`, `amount`, `explorer_transaction_url` — et reste `[]` tant qu’aucun paiement n’est confirmé. Référence complète des champs : [documentation de l’API REST](https://github.com/invoqmoney/api).
 
 ## Créez un paiement de test
 
@@ -114,7 +118,7 @@ Cet endpoint nécessite une clé secrète de test et ne fonctionne que sur les f
 
 `reference_id` est une chaîne optionnelle dans la requête. Omettez-le lorsqu’il n’est pas défini ; ne passez pas `null`.
 
-Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau associatif.
+Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau associatif : la forme de la réponse de création, plus `amount_paid` et `fully_paid_at`.
 
 ## Vérifiez les webhooks
 
@@ -124,6 +128,7 @@ Passez le corps brut de la requête à `verifyWebhook`. N’analysez pas le JSON
 <?php
 
 use function Invoq\isInvoicePaid;
+use function Invoq\isInvoicePaymentReversed;
 use function Invoq\verifyWebhook;
 
 $rawBody = file_get_contents('php://input');
@@ -141,6 +146,8 @@ if (isInvoicePaid($event)) {
     }
 
     fulfillOrder($orderId);
+} elseif (isInvoicePaymentReversed($event)) {
+    holdOrder($event['data']['invoice']['reference_id']);
 }
 
 http_response_code(200);
@@ -150,7 +157,13 @@ Les échecs de vérification de webhook lèvent `InvoqSignatureVerificationError
 
 `verifyWebhook` ne nécessite ni `new Invoq(...)` ni votre clé secrète d’API invoq. Utilisez votre secret de webhook, pas `INVOQ_SECRET_KEY`.
 
-Traitez les commandes à partir des webhooks vérifiés, pas des résultats renvoyés par le navigateur. `isInvoicePaid($event)` renvoie true pour les événements `invoice.paid` permettant de traiter une commande, dont le statut de facture est `paid`, `settling` ou `settled` ; il rejette `review_required`. Gérez le traitement des commandes de façon idempotente, car les livraisons de webhook échouées sont retentées.
+Traitez les commandes à partir des webhooks vérifiés, pas des résultats renvoyés par le navigateur. `isInvoicePaid($event)` renvoie true pour les événements `invoice.paid` permettant de traiter une commande, dont le statut de facture est `paid`, `settling` ou `settled` ; il rejette `review_required`.
+
+invoq envoie aussi `invoice.payment_reversed` quand une facture déjà payée repasse sous son montant — par exemple lorsqu’une réorganisation de chaîne annule un transfert confirmé. Interceptez-le avec `isInvoicePaymentReversed($event)`, puis suspendez ou annulez le traitement selon votre propre politique. Ce garde-fou accepte délibérément n’importe quel statut de facture : ignorer une annulation laisserait une commande traitée sur la base d’un paiement qui n’existe plus. Un type d’événement que cette version du SDK ne modélise pas est tout de même vérifié et renvoyé tel quel.
+
+Les deux événements portent le même `data['invoice']` : `id`, `mode`, `status`, `amount`, `currency`, `amount_paid`, `reference_id`, `payment_revision` et `fully_paid_at`. Les instructions de paiement et `return_url` en sont absentes par choix — faites le rapprochement par id de facture et `reference_id`.
+
+Gérez le traitement des commandes de façon idempotente. Toute réponse non 2xx à une livraison — y compris les redirections et les `4xx` — ainsi que les erreurs réseau et les délais dépassés est retentée selon une échelle bornée de 1 minute, 5 minutes, 30 minutes, puis 2 heures, soit cinq tentatives au total ; votre endpoint peut donc recevoir le même événement plusieurs fois. Les livraisons peuvent aussi arriver dans le désordre : gardez l’instantané dont le `payment_revision` est le plus élevé.
 
 ## Gestion des erreurs
 
@@ -161,7 +174,7 @@ use Invoq\InvoqApiError;
 use Invoq\InvoqError;
 
 try {
-    $invoq->invoices->create(['amount' => '0.001', 'currency' => 'USD']);
+    $invoq->invoices->create(['amount' => '0.001']);
 } catch (InvoqApiError $error) {
     error_log((string) $error->status);
     error_log((string) $error->getApiCode());

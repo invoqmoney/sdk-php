@@ -36,6 +36,7 @@ PHP 8.1 veya üstünü gerektirir.
 1. [invoq paneline](https://app.invoq.money) giriş yapın ve bir proje oluşturun.
 2. **API keys** sayfasında bir gizli anahtar oluşturun. Test anahtarları `sk_test_` ile, canlı anahtarlar `sk_live_` ile başlar.
 3. Projenizin **webhooks** ayarlarında webhook URL'nizi kaydedin. O modun webhook sırrı (`whsec_...`) yalnızca bir kez, webhook'u ilk etkinleştirdiğinizde gösterilir — hemen saklayın.
+4. Canlıya geçmeden önce **Receiving wallet** ayarınızı yapın. Test faturaları buna ihtiyaç duymaz; paranın gideceği yer olmayan canlı bir fatura `409 no_payment_options_available` ile başarısız olur.
 
 İkisini de sunucu ortamınıza ekleyin:
 
@@ -76,20 +77,19 @@ $invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
 ```php
 $invoice = $invoq->invoices->create([
     'amount' => '129',
-    'currency' => 'USD',
     'description' => 'SaaS boilerplate',
     'reference_id' => 'order_1234',
     'return_url' => 'https://merchant.test/thanks',
 ]);
 ```
 
-Tutarı sunucu tarafında belirleyin. İstemciden gelen tutarlara güvenmeyin. `amount`, `'0.01'` ile `'1000000.00'` arasında, en fazla 2 ondalık basamaklı, USD cinsinden ondalık bir dizedir — örneğin `'129'` veya `'129.99'`.
+Tutarı sunucu tarafında belirleyin. İstemciden gelen tutarlara güvenmeyin. `amount`, `'0.01'` ile `'1000000.00'` arasında, en fazla 2 ondalık basamaklı, USD cinsinden ondalık bir dizedir — örneğin `'129'` veya `'129.99'`. Para birimi her zaman USD'dir ve test mi live mı olduğu anahtardan gelir — ikisi de istek alanı değildir.
 
 `invoice.paid` webhook'larını siparişinize geri bağlamak için kararlı bir `reference_id` kullanın. Oluşturmayı yeniden denemeyi de güvenli kılar: aynı `reference_id` ve aynı fatura koşullarıyla tekrar oluşturursanız kopya yerine mevcut faturayı alırsınız; farklı koşullar ise `409 reference_id_conflict` API hatasıyla başarısız olur.
 
-`description` ve `reference_id` isteğe bağlı istek dizeleridir. Ayarlanmadıklarında bunları atlayın; `null` geçirmeyin. `return_url` isteğe bağlıdır ve bir dize ya da `null` olabilir.
+İstek alanları yalnızca `amount`, `description`, `reference_id` ve `return_url`'dir. `description` ve `reference_id` isteğe bağlı istek dizeleridir. Ayarlanmadıklarında bunları atlayın; `null` geçirmeyin. `return_url` isteğe bağlıdır ve bir dize ya da `null` olabilir. Geçirdiğiniz başka herhangi bir anahtar gönderilmez, atılır; çünkü API bilinmeyen gövde anahtarlarını `400 invalid_request` ve `fields[].code: "unknown_field"` ile reddeder.
 
-SDK, yanıttaki `data` nesnesini doğrudan bir ilişkisel dizi (associative array) olarak döndürür.
+SDK, yanıttaki `data` nesnesini doğrudan bir ilişkisel dizi (associative array) olarak döndürür. Bu dizi, fatura özetine ek olarak `status`, `checkout_status`, `payment_revision`, `amount_due`, `amount_overpaid`, `monitoring_ends_at` ve `payment_options` alanlarını taşır.
 
 ## Fatura getirme
 
@@ -97,9 +97,13 @@ SDK, yanıttaki `data` nesnesini doğrudan bir ilişkisel dizi (associative arra
 $invoice = $invoq->invoices->get('inv_123');
 ```
 
-`get()`, checkout'un kullandığı herkese açık fatura şeklini döndürür. `amount_paid`, `amount_due`, `amount_overpaid`, `payment_status`, `project`, `deposit_address`, `monitoring_ends_at`, `monitoring_status`, `transfers` ve `direct_onchain_rails` gibi alanları içerir, ancak `reference_id` içermez. Merchant `reference_id` değeriniz gerektiğinde oluşturma yanıtını veya `invoice.paid` webhook'unu kullanın.
+`get()`, checkout'un kullandığı herkese açık fatura şeklini döndürür: oluşturma şekli, artı `project`, `amount_paid` ve `transfers`, eksi `reference_id`. Merchant `reference_id` değeriniz gerektiğinde oluşturma yanıtını veya `invoice.paid` webhook'unu kullanın.
 
-Yanıtlardaki tutarlar API tarafından normalize edilir: `'129'` ile oluşturun, fatura `amount: '129.0000'` döndürür. Tutarları dize olarak değil, sayısal karşılaştırın. `amount_due`, `max(amount - amount_paid, 0)` olarak türetilir ve `amount_paid` ile aynı 18 ondalık basamak ölçeğini kullanır; `amount_overpaid` ise onun aynasıdır, `max(amount_paid - amount, 0)`, yani parayı kendiniz çıkarmanız hiç gerekmez. `monitoring_status`, `'active'` ya da `'ended'` olur — `'ended'` olduğunda yatırma adresi artık izlenmez — ve `transfers`, onaylanmış zincir üstü tahsilat kaydıdır (her girdide `tx_hash`, `amount` ve `explorer_tx_url` bulunur). İkisi de test faturaları için `null` / `[]` olur.
+İki durum alanı. `status` muhasebe durumudur — `unpaid`, `partially_paid`, `paid`, `settling`, `settled`, `review_required` — ve ödeme tamamlanmış sayılan üç değer yalnızca paranın cüzdanınıza ne kadar yaklaştığıyla ayrılır. `checkout_status` ödeyenin gördüğüdür — `open`, `confirming`, `expired`, `paid`, `unavailable` — ve siparişi işlemek için asla yetki vermez. `payment_revision`, onaylanmış ödeme kümesi her değiştiğinde artan negatif olmayan bir tam sayıdır; böylece elinizdekinden eski bir anlık görüntüyü eleyebilirsiniz.
+
+Yanıtlardaki tutarlar API tarafından normalize edilir: `'129'` ile oluşturun, fatura `amount: '129.0000'` döndürür. Tutarları dize olarak değil, sayısal karşılaştırın. `amount_due`, `max(amount - amount_paid, 0)` olarak türetilir ve `amount_paid` ile aynı 18 ondalık basamak ölçeğini kullanır; `amount_overpaid` ise onun aynasıdır, `max(amount_paid - amount, 0)`, yani parayı kendiniz çıkarmanız hiç gerekmez.
+
+`payment_options` ödeme talimatlarını taşır; oluşturulurken sabitlenir ve test modunda `[]` olur. Girdiler önce `status`, sonra `collection_method` ile ayrışır: yalnızca `'ready'` ödenebilir, `'evm_deposit'` `deposit_address` ve `suggested_amount` taşır, `'direct_exact'` `recipient_address` ile alıcının son hanesine kadar göndermesi gereken `exact_amount` değerini taşır. Bir seçeneği `(chain_namespace, chain_reference, token_address)` üçlüsüyle tanımlayın, dizideki konumuyla asla değil. `monitoring_ends_at` ödeme penceresini kapatır ve test modunda `null` olur. `transfers` onaylanmış tahsilat kaydıdır — `transaction_id`, `event_index`, `amount`, `explorer_transaction_url` — ve bir ödeme onaylanana kadar `[]` kalır. Tüm alanlar: [REST API belgeleri](https://github.com/invoqmoney/api).
 
 ## Test ödemesi oluşturma
 
@@ -114,7 +118,7 @@ Bu uç nokta bir test gizli anahtarı gerektirir ve yalnızca test faturalarınd
 
 `reference_id` isteğe bağlı bir istek dizesidir. Ayarlanmadığında atlayın; `null` geçirmeyin.
 
-SDK, yanıttaki `data` nesnesini doğrudan bir ilişkisel dizi olarak döndürür.
+SDK, yanıttaki `data` nesnesini doğrudan bir ilişkisel dizi olarak döndürür: oluşturma şekli, artı `amount_paid` ve `fully_paid_at`.
 
 ## Webhook'ları doğrulama
 
@@ -124,6 +128,7 @@ Ham istek gövdesini `verifyWebhook`'a geçirin. Doğrulamadan önce JSON'u ayr�
 <?php
 
 use function Invoq\isInvoicePaid;
+use function Invoq\isInvoicePaymentReversed;
 use function Invoq\verifyWebhook;
 
 $rawBody = file_get_contents('php://input');
@@ -141,6 +146,8 @@ if (isInvoicePaid($event)) {
     }
 
     fulfillOrder($orderId);
+} elseif (isInvoicePaymentReversed($event)) {
+    holdOrder($event['data']['invoice']['reference_id']);
 }
 
 http_response_code(200);
@@ -150,7 +157,13 @@ Webhook doğrulama hataları `InvoqSignatureVerificationError` fırlatır. `veri
 
 `verifyWebhook`, `new Invoq(...)` çağrısını veya invoq API gizli anahtarınızı gerektirmez. `INVOQ_SECRET_KEY` değil, webhook sırrınızı kullanın.
 
-Siparişleri doğrulanmış webhook'lardan işleyin, tarayıcı checkout sonuçlarından değil. `isInvoicePaid($event)`, fatura durumu `paid`, `settling` veya `settled` olan işlenebilir `invoice.paid` olayları için true döndürür; `review_required` durumunu reddeder. Başarısız webhook teslimatları yeniden denendiği için sipariş işlemeyi idempotent biçimde ele alın.
+Siparişleri doğrulanmış webhook'lardan işleyin, tarayıcı checkout sonuçlarından değil. `isInvoicePaid($event)`, fatura durumu `paid`, `settling` veya `settled` olan işlenebilir `invoice.paid` olayları için true döndürür; `review_required` durumunu reddeder.
+
+invoq, daha önce ödenmiş bir fatura kendi tutarının altına geri düştüğünde `invoice.payment_reversed` de gönderir — örneğin zincir reorg'u onaylanmış bir transferi düşürdüğünde. Bunu `isInvoicePaymentReversed($event)` ile yakalayın ve kendi politikanıza göre siparişi bekletin veya geri alın. Bu kontrol bilerek her fatura durumunu kabul eder: bir geri almayı elemek, artık var olmayan bir ödemeye dayanan bir siparişi işlenmiş halde bırakırdı. Bu SDK sürümünün modellemediği bir olay tipi de doğrulanır ve olduğu gibi döndürülür.
+
+Her iki olay da aynı `data['invoice']` yapısını taşır: `id`, `mode`, `status`, `amount`, `currency`, `amount_paid`, `reference_id`, `payment_revision` ve `fully_paid_at`. Ödeme talimatları ile `return_url` tasarım gereği yoktur — mutabakatı fatura id'si ve `reference_id` ile yapın.
+
+Sipariş işlemeyi idempotent biçimde ele alın. Bir teslimata verilen 2xx olmayan her yanıt — yönlendirmeler ve `4xx` dahil — ayrıca ağ hataları ve zaman aşımları yeniden denenir; aralar 1 dakika, 5 dakika, 30 dakika, ardından 2 saat olmak üzere sınırlıdır ve toplam beş denemedir, yani uç noktanız aynı olayı birden fazla kez alabilir. Teslimatlar sırasız da gelebilir: `payment_revision` değeri en yüksek olan anlık görüntüyü saklayın.
 
 ## Hata yönetimi
 
@@ -161,7 +174,7 @@ use Invoq\InvoqApiError;
 use Invoq\InvoqError;
 
 try {
-    $invoq->invoices->create(['amount' => '0.001', 'currency' => 'USD']);
+    $invoq->invoices->create(['amount' => '0.001']);
 } catch (InvoqApiError $error) {
     error_log((string) $error->status);
     error_log((string) $error->getApiCode());

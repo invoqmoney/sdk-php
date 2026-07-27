@@ -7,6 +7,8 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $body = file_get_contents('php://input') ?: '';
 $input = $body === '' ? [] : json_decode($body, true);
 
+// The create shape, exactly its 14 wire keys. Test mode issues no routes and
+// has no payment window.
 $invoice = [
     'id' => 'inv_test_123',
     'mode' => 'test',
@@ -15,25 +17,104 @@ $invoice = [
     'reference_id' => 'order_123',
     'description' => 'Test order',
     'return_url' => 'https://merchant.test/thanks',
-    'deposit_address' => null,
     'status' => 'unpaid',
+    'checkout_status' => 'unavailable',
+    'payment_revision' => 0,
     'amount_due' => '149.000000000000000000',
     'amount_overpaid' => '0.000000000000000000',
     'monitoring_ends_at' => null,
-    'monitoring_status' => null,
-    'direct_onchain_rails' => [],
+    'payment_options' => [],
 ];
 
-$publicInvoice = $invoice;
-unset($publicInvoice['reference_id']);
-$publicInvoice['project'] = [
+// The public read of that test invoice: the create shape plus project,
+// amount_paid, and transfers, minus reference_id.
+$publicTestInvoice = $invoice;
+unset($publicTestInvoice['reference_id']);
+$publicTestInvoice['project'] = [
     'id' => 'proj_test_123',
     'name' => 'Test project',
     'logo_url' => null,
 ];
-$publicInvoice['amount_paid'] = '0.000000000000000000';
-$publicInvoice['payment_status'] = 'unpaid';
-$publicInvoice['transfers'] = [];
+$publicTestInvoice['amount_paid'] = '0.000000000000000000';
+$publicTestInvoice['transfers'] = [];
+
+// The public read of a live invoice, carrying every payment option variant and
+// one confirmed transfer.
+$publicLiveInvoice = [
+    'id' => 'inv_live_123',
+    'mode' => 'live',
+    'amount' => '149.0000',
+    'currency' => 'USD',
+    'description' => 'Test order',
+    'return_url' => 'https://merchant.test/thanks',
+    'project' => [
+        'id' => 'proj_test_123',
+        'name' => 'Test project',
+        'logo_url' => null,
+    ],
+    'status' => 'partially_paid',
+    'checkout_status' => 'open',
+    'payment_revision' => 1,
+    'amount_paid' => '49.000000000000000000',
+    'amount_due' => '100.000000000000000000',
+    'amount_overpaid' => '0.000000000000000000',
+    'transfers' => [[
+        'chain_namespace' => 'eip155',
+        'chain_reference' => '8453',
+        'transaction_id' => '0x5c0b3a2e8f4d6a1b9c7e0d2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b',
+        'event_index' => 2,
+        'amount' => '49.000000000000000000',
+        'explorer_transaction_url' => null,
+    ]],
+    'monitoring_ends_at' => '2026-06-16T00:00:00.000Z',
+    'payment_options' => [
+        [
+            'collection_method' => 'evm_deposit',
+            'chain_namespace' => 'eip155',
+            'chain_reference' => '8453',
+            'currency' => 'USD',
+            'token_address' => '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+            'token_decimals' => 6,
+            'network_label' => 'Base',
+            'display_symbol' => 'USDC',
+            'logo_url' => null,
+            'chain_logo_url' => null,
+            'status' => 'ready',
+            'deposit_address' => '0x20c124f3919bb502c6126cda5bd6e5287859d5ca',
+            'suggested_amount' => '100.000000',
+        ],
+        [
+            'collection_method' => 'direct_exact',
+            'chain_namespace' => 'solana',
+            'chain_reference' => '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+            'currency' => 'USD',
+            'token_address' => 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+            'token_decimals' => 6,
+            'network_label' => 'Solana',
+            'display_symbol' => 'USDC',
+            'logo_url' => null,
+            'chain_logo_url' => null,
+            'status' => 'ready',
+            'recipient_address' => 'GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB',
+            'invoice_amount' => '149.000000',
+            'matching_increment' => '0.000123',
+            'exact_amount' => '149.000123',
+        ],
+        [
+            'collection_method' => 'direct_exact',
+            'chain_namespace' => 'tron',
+            'chain_reference' => '0x2b6653dc',
+            'currency' => 'USD',
+            'token_address' => 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+            'token_decimals' => 6,
+            'network_label' => 'TRON',
+            'display_symbol' => 'USDT',
+            'logo_url' => null,
+            'chain_logo_url' => null,
+            'status' => 'unavailable',
+        ],
+    ],
+];
 
 header('Content-Type: application/json');
 
@@ -58,7 +139,6 @@ if ($method === 'POST' && $path === '/v1/invoices') {
     if (($input['amount'] ?? null) === '0.001') {
         assertBody([
             'amount' => '0.001',
-            'currency' => 'USD',
         ], $input);
 
         http_response_code(400);
@@ -79,7 +159,6 @@ if ($method === 'POST' && $path === '/v1/invoices') {
     if (($input['amount'] ?? null) === '151') {
         assertBody([
             'amount' => '151',
-            'currency' => 'USD',
             'return_url' => null,
         ], $input);
 
@@ -98,7 +177,6 @@ if ($method === 'POST' && $path === '/v1/invoices') {
     if (($input['amount'] ?? null) === '502') {
         assertBody([
             'amount' => '502',
-            'currency' => 'USD',
         ], $input);
 
         header('Content-Type: text/html');
@@ -110,7 +188,6 @@ if ($method === 'POST' && $path === '/v1/invoices') {
     if (($input['amount'] ?? null) === '302') {
         assertBody([
             'amount' => '302',
-            'currency' => 'USD',
         ], $input);
 
         header('Location: /v1/redirect-target');
@@ -122,7 +199,6 @@ if ($method === 'POST' && $path === '/v1/invoices') {
     if (($input['amount'] ?? null) === '150') {
         assertBody([
             'amount' => '150',
-            'currency' => 'USD',
         ], $input);
 
         http_response_code(201);
@@ -137,9 +213,10 @@ if ($method === 'POST' && $path === '/v1/invoices') {
         return;
     }
 
+    // The create body is exactly these four keys: the API schema is strict and
+    // rejects anything else with 400 invalid_request / unknown_field.
     assertBody([
         'amount' => '149',
-        'currency' => 'USD',
         'description' => 'Test order',
         'reference_id' => 'order_123',
         'return_url' => 'https://merchant.test/thanks',
@@ -156,7 +233,17 @@ if ($method === 'GET' && $path === '/v1/invoices/inv_test_123') {
     assertNoHeader('CONTENT_TYPE');
     assertBody([], $input);
 
-    echo json_encode(['data' => $publicInvoice]);
+    echo json_encode(['data' => $publicTestInvoice]);
+    return;
+}
+
+if ($method === 'GET' && $path === '/v1/invoices/inv_live_123') {
+    assertHeader('HTTP_ACCEPT', 'application/json');
+    assertHeaderStartsWith('HTTP_USER_AGENT', 'invoq-php/');
+    assertNoHeader('CONTENT_TYPE');
+    assertBody([], $input);
+
+    echo json_encode(['data' => $publicLiveInvoice]);
     return;
 }
 
@@ -174,11 +261,13 @@ if ($method === 'POST' && $path === '/v1/invoices/inv_test_123/test-payments') {
         echo json_encode([
             'data' => [
                 ...$invoice,
+                'status' => 'paid',
+                'checkout_status' => 'paid',
+                'payment_revision' => 1,
                 'amount_paid' => '150.000000000000000000',
                 'amount_due' => '0.000000000000000000',
                 'amount_overpaid' => '1.000000000000000000',
                 'reference_id' => null,
-                'status' => 'paid',
                 'fully_paid_at' => '2026-06-15T00:00:00.000Z',
             ],
             'meta' => ['result' => 'created'],
@@ -191,11 +280,14 @@ if ($method === 'POST' && $path === '/v1/invoices/inv_test_123/test-payments') {
         'reference_id' => 'test_payment_001',
     ], $input);
 
+    // The create shape plus amount_paid and fully_paid_at.
     http_response_code(201);
     echo json_encode([
         'data' => [
             ...$invoice,
             'status' => 'paid',
+            'checkout_status' => 'paid',
+            'payment_revision' => 1,
             'amount_paid' => '149.000000000000000000',
             'amount_due' => '0.000000000000000000',
             'fully_paid_at' => '2026-06-15T00:00:00.000Z',
