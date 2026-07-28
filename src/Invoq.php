@@ -25,6 +25,12 @@ class Invoq
             throw new InvoqError('invoq API key must be a non-empty string.');
         }
 
+        // A control character in a key is either rejected deep in the transport or
+        // silently sent; reject it here so every SDK answers the same way.
+        if (preg_match('/[\x00-\x1F\x7F]/', $apiKey) === 1) {
+            throw new InvoqError('invoq API key must not contain control characters.');
+        }
+
         $apiOrigin = $options['apiOrigin']
             ?? self::DEFAULT_API_ORIGIN;
         $timeoutMs = $options['timeoutMs']

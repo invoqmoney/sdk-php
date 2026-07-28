@@ -7,6 +7,12 @@ PHP SDK for invoq server APIs and webhook verification.
 Use this package only on your server. It accepts secret keys and must not be
 bundled into browser code.
 
+**Coding with AI? Paste this.**
+
+```
+Add stablecoin payments to my project with invoq. Start in test mode. Read the docs before you write any code: https://invoq.money/llms.txt
+```
+
 ## Server SDKs
 
 Create invoices and verify webhooks from your backend in any of these languages — same REST API, same webhook signature. This repository is the PHP SDK.
@@ -56,7 +62,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 Production API default:
@@ -68,7 +74,7 @@ https://api.invoq.money
 Override the API origin during development:
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -167,6 +173,16 @@ amounts are allowed and produce `partially_paid`.
 The SDK returns the response `data` object directly as an associative array: the
 create shape plus `amount_paid` and `fully_paid_at`.
 
+## Hosted checkout page
+
+Every invoice also has a hosted checkout page at:
+
+```text
+https://pay.invoq.money/<invoice id>
+```
+
+Share the link or redirect to it when an in-page checkout modal is not a fit.
+
 ## Verify webhooks
 
 Pass the raw request body to `verifyWebhook`. Do not parse JSON and encode it
@@ -183,7 +199,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

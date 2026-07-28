@@ -35,7 +35,7 @@ final class InvoicesResource
      */
     public function get(string $invoiceId): array
     {
-        $id = self::requiredRequestString($invoiceId, 'invoiceId');
+        $id = self::requiredPathSegment($invoiceId, 'invoiceId');
 
         return Request::json(
             apiKey: $this->apiKey,
@@ -52,7 +52,7 @@ final class InvoicesResource
      */
     public function createTestPayment(string $invoiceId, array $input): array
     {
-        $id = self::requiredRequestString($invoiceId, 'invoiceId');
+        $id = self::requiredPathSegment($invoiceId, 'invoiceId');
 
         return Request::json(
             apiKey: $this->apiKey,
@@ -96,6 +96,23 @@ final class InvoicesResource
         self::copyOptionalStringField($input, $body, 'reference_id');
 
         return $body;
+    }
+
+    /**
+     * A URL resolver pops '.' and '..', so an id of either would call a
+     * different endpoint instead of 404ing. Percent-encoding is no help.
+     */
+    private static function requiredPathSegment(mixed $value, string $field): string
+    {
+        $segment = self::requiredRequestString($value, $field);
+
+        if ($segment === '.' || $segment === '..') {
+            throw new InvoqError(
+                $field . " must not be a path segment that resolves ('.' or '..').",
+            );
+        }
+
+        return $segment;
     }
 
     private static function requiredRequestString(mixed $value, string $field): string

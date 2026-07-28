@@ -8,6 +8,12 @@ SDK PHP dành cho các API server của invoq và xác minh webhook.
 
 Chỉ dùng gói này trên máy chủ của bạn. Nó nhận khóa bí mật và không được đóng gói vào code chạy trên trình duyệt.
 
+**Đang code bằng AI? Dán câu này.**
+
+```
+Thêm thanh toán stablecoin vào dự án của tôi bằng invoq. Bắt đầu ở chế độ thử nghiệm. Đọc tài liệu trước khi viết code: https://invoq.money/llms.txt
+```
+
 ## SDK server
 
 Tạo hóa đơn và xác minh webhook từ backend của bạn bằng bất kỳ ngôn ngữ nào dưới đây — cùng REST API, cùng chữ ký webhook. Repo này là SDK PHP.
@@ -52,7 +58,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 Mặc định của API khi chạy thật:
@@ -64,7 +70,7 @@ https://api.invoq.money
 Ghi đè origin API khi phát triển:
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -120,6 +126,16 @@ Endpoint này yêu cầu khóa bí mật thử nghiệm và chỉ hoạt động
 
 SDK trả về trực tiếp đối tượng `data` của phản hồi dưới dạng mảng kết hợp: dạng phản hồi khi tạo, cộng thêm `amount_paid` và `fully_paid_at`.
 
+## Trang thanh toán được lưu trữ sẵn
+
+Mỗi hóa đơn còn có một trang thanh toán được lưu trữ sẵn tại:
+
+```text
+https://pay.invoq.money/<id hóa đơn>
+```
+
+Cứ gửi link hoặc chuyển hướng sang đó khi cửa sổ thanh toán nhúng trong trang không phù hợp.
+
 ## Xác minh webhook
 
 Truyền nội dung request gốc cho `verifyWebhook`. Đừng phân tích JSON rồi mã hóa lại trước khi xác minh.
@@ -135,7 +151,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

@@ -8,6 +8,12 @@ PHP SDK สำหรับ API ฝั่งเซิร์ฟเวอร์ข�
 
 ใช้แพ็กเกจนี้บนเซิร์ฟเวอร์ของคุณเท่านั้น แพ็กเกจนี้รับคีย์ลับ (secret key) จึงต้องไม่นำไปรวมไว้ในโค้ดฝั่งเบราว์เซอร์
 
+**ใช้ AI เขียนโค้ดอยู่ไหม วางข้อความนี้**
+
+```
+เพิ่มการรับชำระด้วย stablecoin เข้าโปรเจกต์ของฉันด้วย invoq เริ่มที่โหมดทดสอบ อ่านเอกสารก่อนเขียนโค้ด: https://invoq.money/llms.txt
+```
+
 ## SDK ฝั่งเซิร์ฟเวอร์
 
 สร้างใบแจ้งหนี้และตรวจสอบ webhook จากแบ็กเอนด์ของคุณด้วยภาษาใดก็ได้เหล่านี้ — REST API และลายเซ็น webhook เหมือนกันทุกภาษา repo นี้คือ SDK สำหรับ PHP
@@ -52,7 +58,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 ค่าเริ่มต้นของ API ในสภาพแวดล้อมจริง:
@@ -64,7 +70,7 @@ https://api.invoq.money
 ปรับทับ origin ของ API ระหว่างการพัฒนา:
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -120,6 +126,16 @@ endpoint นี้ต้องใช้คีย์ลับทดสอบ แ�
 
 SDK จะคืนออบเจกต์ `data` ของ response กลับมาโดยตรงเป็น associative array คือรูปแบบเดียวกับตอนสร้าง บวก `amount_paid` และ `fully_paid_at`
 
+## หน้าชำระเงินที่โฮสต์ให้
+
+ใบแจ้งหนี้ทุกใบมีหน้าชำระเงินที่โฮสต์ให้อยู่แล้วที่:
+
+```text
+https://pay.invoq.money/<id ใบแจ้งหนี้>
+```
+
+แชร์ลิงก์หรือเปลี่ยนเส้นทางไปที่นั่นได้เลยเมื่อหน้าชำระเงินแบบฝังในเว็บไม่ตอบโจทย์
+
 ## ตรวจสอบ webhook
 
 ส่งเนื้อหา request ดิบเข้าไปยัง `verifyWebhook` อย่าแปลง JSON เป็นออบเจกต์แล้ว encode กลับก่อนการตรวจสอบ
@@ -135,7 +151,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

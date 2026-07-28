@@ -8,6 +8,12 @@ SDK PHP untuk API server invoq dan verifikasi webhook.
 
 Gunakan paket ini hanya di server Anda. Paket ini menerima kunci rahasia (secret key) dan tidak boleh disertakan ke dalam kode browser.
 
+**Coding pakai AI? Tempelkan ini.**
+
+```
+Tambahkan pembayaran stablecoin ke proyek saya dengan invoq. Mulai dari mode tes. Baca dokumentasinya sebelum menulis kode: https://invoq.money/llms.txt
+```
+
 ## SDK server
 
 Buat invoice dan verifikasi webhook dari backend Anda dalam bahasa mana pun berikut — REST API dan tanda tangan webhook-nya sama persis. Repo ini adalah SDK PHP.
@@ -57,7 +63,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 Bawaan API produksi:
@@ -69,7 +75,7 @@ https://api.invoq.money
 Timpa origin API saat pengembangan:
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -170,6 +176,16 @@ berikan `null`.
 SDK langsung mengembalikan objek `data` dari respons sebagai array asosiatif: bentuk
 respons pembuatan ditambah `amount_paid` dan `fully_paid_at`.
 
+## Halaman checkout yang dihosting
+
+Setiap invoice juga punya halaman checkout yang di-host di:
+
+```text
+https://pay.invoq.money/<id invoice>
+```
+
+Bagikan tautannya atau alihkan ke sana kalau jendela checkout dalam halaman kurang pas.
+
 ## Memverifikasi webhook
 
 Berikan isi request mentah ke `verifyWebhook`. Jangan mem-parse JSON lalu
@@ -186,7 +202,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

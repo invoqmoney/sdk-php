@@ -8,6 +8,12 @@ invoq sunucu API'leri ve webhook doğrulaması için PHP SDK'sı.
 
 Bu paketi yalnızca sunucunuzda kullanın. Gizli anahtarları kabul eder ve tarayıcı koduna dahil edilmemelidir.
 
+**AI ile mi kod yazıyorsunuz? Bunu yapıştırın.**
+
+```
+invoq ile projeme stablecoin ödemesi ekle. Test modunda başla. Kod yazmadan önce belgeleri oku: https://invoq.money/llms.txt
+```
+
 ## Sunucu SDK'ları
 
 Bu dillerin herhangi biriyle arka ucunuzdan fatura oluşturun ve webhook'ları doğrulayın — aynı REST API, aynı webhook imzası. Bu repo, PHP SDK'sıdır.
@@ -52,7 +58,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 Canlı ortam API varsayılanı:
@@ -64,7 +70,7 @@ https://api.invoq.money
 Geliştirme sırasında API origin'ini değiştirin:
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -120,6 +126,16 @@ Bu uç nokta bir test gizli anahtarı gerektirir ve yalnızca test faturalarınd
 
 SDK, yanıttaki `data` nesnesini doğrudan bir ilişkisel dizi olarak döndürür: oluşturma şekli, artı `amount_paid` ve `fully_paid_at`.
 
+## Barındırılan ödeme sayfası
+
+Her faturanın barındırılan bir ödeme sayfası da vardır:
+
+```text
+https://pay.invoq.money/<fatura id>
+```
+
+Sayfa içi ödeme penceresi uygun olmadığında bağlantıyı paylaşın ya da oraya yönlendirin.
+
 ## Webhook'ları doğrulama
 
 Ham istek gövdesini `verifyWebhook`'a geçirin. Doğrulamadan önce JSON'u ayrıştırıp yeniden kodlamayın.
@@ -135,7 +151,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

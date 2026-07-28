@@ -8,6 +8,12 @@
 
 這個套件只在你的伺服器上用。它需要金鑰（secret key），絕不能打包進瀏覽器端程式碼。
 
+**在用 AI 寫程式？把這段貼給它。**
+
+```
+用 invoq 幫我的專案串接穩定幣收款，從測試模式開始。寫程式前先讀文件 https://invoq.money/llms.txt
+```
+
 ## 伺服器端 SDK
 
 用下面任一種語言，都能從你的後端建立帳單、驗證 webhook——REST API 和 webhook 簽章完全一致。本倉庫是 PHP SDK。
@@ -52,7 +58,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 正式環境 API 預設位址：
@@ -64,7 +70,7 @@ https://api.invoq.money
 開發時可以覆寫 API origin：
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -120,6 +126,16 @@ $paidInvoice = $invoq->invoices->createTestPayment($invoice['id'], [
 
 SDK 會把回應裡的 `data` 物件直接以關聯陣列回傳：即建立回應的結構，加上 `amount_paid` 和 `fully_paid_at`。
 
+## 託管結帳頁
+
+每張帳單都自帶一個託管結帳頁：
+
+```text
+https://pay.invoq.money/<帳單 id>
+```
+
+當頁內結帳彈窗不適合時，把連結分享出去或直接導向過去就行。
+
 ## 驗證 webhook
 
 把原始請求內容傳給 `verifyWebhook`。驗簽前不要先把 JSON 解析再重新編碼。
@@ -135,7 +151,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

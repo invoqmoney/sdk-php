@@ -8,6 +8,12 @@ SDK PHP pour les API serveur d’invoq et la vérification des webhooks.
 
 N’utilisez ce paquet que sur votre serveur. Il accepte des clés secrètes et ne doit pas être intégré à du code côté navigateur.
 
+**Vous codez avec une IA ? Collez ceci.**
+
+```
+Ajoute les paiements en stablecoins à mon projet avec invoq. Commence en mode test. Lis la documentation avant de coder : https://invoq.money/llms.txt
+```
+
 ## SDK serveur
 
 Créez des factures et vérifiez les webhooks depuis votre backend dans l’un de ces langages — même REST API, même signature de webhook. Ce dépôt est le SDK PHP.
@@ -52,7 +58,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 Valeur par défaut de l’API en production :
@@ -64,7 +70,7 @@ https://api.invoq.money
 Surchargez l’origine de l’API en développement local :
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -120,6 +126,16 @@ Cet endpoint nécessite une clé secrète de test et ne fonctionne que sur les f
 
 Le SDK renvoie directement l’objet `data` de la réponse sous forme de tableau associatif : la forme de la réponse de création, plus `amount_paid` et `fully_paid_at`.
 
+## Page de paiement hébergée
+
+Chaque facture dispose aussi d'une page de paiement hébergée à :
+
+```text
+https://pay.invoq.money/<id de facture>
+```
+
+Partagez le lien ou redirigez-y quand une fenêtre de paiement intégrée à la page ne convient pas.
+
 ## Vérifiez les webhooks
 
 Passez le corps brut de la requête à `verifyWebhook`. N’analysez pas le JSON pour le réencoder avant la vérification.
@@ -135,7 +151,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

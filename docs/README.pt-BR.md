@@ -8,6 +8,12 @@ SDK de PHP para as APIs de servidor da invoq e a verificação de webhooks.
 
 Use este pacote apenas no seu servidor. Ele aceita chaves secretas e não deve ser incluído no código do navegador.
 
+**Programa com IA? Cole isto.**
+
+```
+Adicione pagamentos em stablecoin ao meu projeto com invoq. Comece no modo de teste. Leia a documentação antes de escrever código: https://invoq.money/llms.txt
+```
+
 ## SDKs de servidor
 
 Crie faturas e verifique webhooks a partir do seu backend em qualquer uma destas linguagens — mesma REST API, mesma assinatura de webhook. Este repositório é o SDK de PHP.
@@ -57,7 +63,7 @@ INVOQ_WEBHOOK_SECRET=whsec_...
 
 use Invoq\Invoq;
 
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY']);
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'));
 ```
 
 Padrão da API em produção:
@@ -69,7 +75,7 @@ https://api.invoq.money
 Sobrescreva o origin da API durante o desenvolvimento:
 
 ```php
-$invoq = new Invoq($_ENV['INVOQ_SECRET_KEY'], [
+$invoq = new Invoq(getenv('INVOQ_SECRET_KEY'), [
     'apiOrigin' => 'http://localhost:8787',
     'timeoutMs' => 10_000,
 ]);
@@ -174,6 +180,16 @@ definido; não passe `null`.
 O SDK retorna o objeto `data` da resposta diretamente como um array associativo:
 o formato da resposta de criação mais `amount_paid` e `fully_paid_at`.
 
+## Página de checkout hospedada
+
+Toda fatura também tem uma página de checkout hospedada em:
+
+```text
+https://pay.invoq.money/<id da fatura>
+```
+
+Compartilhe o link ou redirecione para lá quando uma janela de checkout dentro da página não encaixar.
+
 ## Verifique webhooks
 
 Passe o corpo bruto da requisição para `verifyWebhook`. Não interprete o JSON
@@ -190,7 +206,7 @@ $rawBody = file_get_contents('php://input');
 $event = verifyWebhook(
     $rawBody === false ? '' : $rawBody,
     ['invoq-signature' => $_SERVER['HTTP_INVOQ_SIGNATURE'] ?? null],
-    $_ENV['INVOQ_WEBHOOK_SECRET'],
+    getenv('INVOQ_WEBHOOK_SECRET'),
 );
 
 if (isInvoicePaid($event)) {

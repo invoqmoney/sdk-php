@@ -19,6 +19,8 @@ $server = startServer();
 try {
     testClient($server['baseUrl']);
     testWebhook();
+    testRejectsControlCharactersInTheApiKey();
+    testRejectsDotSegmentInvoiceIds();
 } finally {
     stopServer($server['process']);
 }
@@ -657,4 +659,33 @@ function fail(string $message): never
 {
     fwrite(STDERR, $message . "\n");
     exit(1);
+}
+
+function testRejectsControlCharactersInTheApiKey(): void
+{
+    foreach (["sk_test_x\r\nX-Injected: yes", "sk_test_x\n", "sk_test\0x"] as $key) {
+        try {
+            new Invoq($key);
+            fail('Expected a control-character API key to be rejected.');
+        } catch (InvoqError $error) {
+            same(true, str_contains($error->getMessage(), 'control characters'));
+        }
+    }
+}
+
+function testRejectsDotSegmentInvoiceIds(): void
+{
+    $client = new Invoq('sk_test_123');
+
+    foreach (['.', '..'] as $id) {
+        foreach ([fn () => $client->invoices->get($id),
+                  fn () => $client->invoices->createTestPayment($id, ['amount' => '1'])] as $call) {
+            try {
+                $call();
+                fail('Expected a dot-segment invoice id to be rejected.');
+            } catch (InvoqError $error) {
+                same(true, str_contains($error->getMessage(), 'path segment'));
+            }
+        }
+    }
 }

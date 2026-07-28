@@ -50,6 +50,7 @@ final class Request
 
         try {
             $payload = json_decode($responseText, true, 512, JSON_THROW_ON_ERROR);
+            $typed = json_decode($responseText, false, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $error) {
             if ($status < 200 || $status >= 300) {
                 throw self::apiErrorFromResponse($status, $responseText);
@@ -69,7 +70,9 @@ final class Request
             );
         }
 
-        if (!is_array($payload['data'])) {
+        // json_decode(assoc: true) maps {} and [] to the same PHP []; only an
+        // object decode can tell them apart.
+        if (!(($typed->data ?? null) instanceof \stdClass)) {
             throw new InvoqError(
                 'invoq API response data envelope was not an object.',
                 payload: $payload,
@@ -200,9 +203,12 @@ final class Request
                 continue;
             }
 
+            // A location this version does not know is passed through, not
+            // dropped: the caller is already on an error path and needs the
+            // code and message. Only a structurally invalid entry is discarded.
             $location = $field['location'] ?? null;
 
-            if (!in_array($location, ['query', 'path', 'body', 'header'], true)) {
+            if (!is_string($location)) {
                 continue;
             }
 
