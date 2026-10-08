@@ -38,7 +38,7 @@ Requires PHP 8.1 or newer.
 
 ## Get your keys
 
-1. Sign in to the [invoq dashboard](https://app.invoq.money) and create a project.
+1. Sign in to the invoq dashboard and create a project.
 2. On the **API keys** page, create a secret key. Test keys start with
    `sk_test_`, live keys with `sk_live_`.
 3. In your project's **webhooks** settings, save your webhook URL. The webhook

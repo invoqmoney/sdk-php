@@ -39,7 +39,7 @@ Nécessite PHP 8.1 ou plus récent.
 
 ## Récupérez vos clés
 
-1. Connectez-vous au [tableau de bord invoq](https://app.invoq.money) et créez un projet.
+1. Connectez-vous au tableau de bord invoq et créez un projet.
 2. Sur la page **API keys**, créez une clé secrète. Les clés de test commencent par `sk_test_`, les clés de production par `sk_live_`.
 3. Dans les réglages **webhooks** de votre projet, enregistrez votre URL de webhook. Le secret du webhook (`whsec_...`) pour ce mode ne s’affiche qu’une seule fois, à la première activation du webhook — notez-le tout de suite.
 4. Configurez votre **Receiving wallet** avant de passer en production. Les factures de test n’en ont pas besoin ; une facture de production sans destination de règlement échoue avec `409 no_payment_options_available`.

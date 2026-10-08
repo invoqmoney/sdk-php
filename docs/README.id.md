@@ -39,7 +39,7 @@ Membutuhkan PHP 8.1 atau lebih baru.
 
 ## Siapkan kunci Anda
 
-1. Masuk ke [dashboard invoq](https://app.invoq.money) dan buat sebuah proyek.
+1. Masuk ke dashboard invoq dan buat sebuah proyek.
 2. Di halaman **API keys**, buat kunci rahasia (secret key). Kunci uji coba diawali
    `sk_test_`, kunci produksi diawali `sk_live_`.
 3. Di pengaturan **webhooks** proyek Anda, simpan URL webhook Anda. Kunci rahasia
